@@ -15,8 +15,8 @@ from shapely.ops import unary_union, linemerge
 import shapely
 import shapely.affinity as affinity
 from shapely import box as shply_box
-from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, simplify
-from shapely.geometry.base import BaseMultipartGeometry
+from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, is_prepared, simplify
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 
 from lxml import etree as ET
 import ezdxf
@@ -161,7 +161,7 @@ class Gerber(Geometry):
         self.aperture_macros: dict[str, ApertureMacro] = {}
 
         # will store the Gerber geometry's as solids
-        self.solid_geometry = Polygon()
+        self.solid_geometry: list[BaseGeometry] | BaseGeometry = Polygon()
 
         # will store the Gerber geometry's as paths
         self.follow_geometry = []
@@ -628,6 +628,7 @@ class Gerber(Geometry):
                         buff_length = 1
 
                     if buff_length > 0:
+                        assert isinstance(self.solid_geometry, BaseGeometry)
                         if current_polarity == 'D':
                             self.solid_geometry = self.solid_geometry.union(unary_union(poly_buffer))
 
@@ -1423,6 +1424,7 @@ class Gerber(Geometry):
                 sol_geo_length = 1
 
             try:
+                assert isinstance(self.solid_geometry, BaseGeometry)
                 if buff_length == 0 and sol_geo_length in [0, 1] and self.solid_geometry.area == 0:
                     self.app.log.error("Object is not Gerber file or empty. Aborting Object creation.")
                     return 'fail'
@@ -1965,6 +1967,7 @@ class Gerber(Geometry):
         :rtype: Shapely.Polygon
         """
 
+        assert isinstance(self.solid_geometry, BaseGeometry)
         bbox = self.solid_geometry.envelope.buffer(margin)
         if not rounded:
             bbox = bbox.envelope
