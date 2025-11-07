@@ -155,10 +155,10 @@ class Gerber(Geometry):
         self.units: Literal["IN", "MM"] = self.app.options['gerber_def_units']
 
         # aperture storage
-        self.tools = {}
+        self.tools: dict[int | None, dict] = {}
 
         # Aperture Macros
-        self.aperture_macros = {}
+        self.aperture_macros: dict[str, ApertureMacro] = {}
 
         # will store the Gerber geometry's as solids
         self.solid_geometry = Polygon()
@@ -311,10 +311,8 @@ class Gerber(Geometry):
         # referenced it without the zero, so this is a hack to handle that.
         apid = int(apertureId)
 
-        try:  # Could be empty for aperture macros
-            paramList = apParameters.split('X')
-        except Exception:
-            paramList = None
+        # Could be empty for aperture macros
+        paramList = (apParameters or "").split('X')
 
         if apertureType == "C":  # Circle, example: %ADD11C,0.1*%
             self.tools[apid] = {
