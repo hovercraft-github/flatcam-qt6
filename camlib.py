@@ -42,7 +42,7 @@ import shapely.affinity as affinity
 from shapely.affinity import scale, translate
 from shapely.wkt import loads as sloads
 from shapely.wkt import dumps as sdumps
-from shapely.geometry.base import BaseGeometry, GeometrySequence
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry, GeometrySequence
 from shapely import union, difference
 
 # ---------------------------------------
@@ -8027,9 +8027,9 @@ def translate_geometry(obj, dx, dy):
 
 
 def flatten_shapely_geometry(
-        geometry: BaseGeometry | list[BaseGeometry] | GeometrySequence,
+        geometry: BaseGeometry | BaseMultipartGeometry | Iterable[BaseGeometry] | GeometrySequence,
         simplify_tolerance: float = 0.0,
-) -> list:
+) -> list[BaseGeometry]:
     """
 
     :param geometry:
@@ -8039,18 +8039,24 @@ def flatten_shapely_geometry(
     :return:
     :rtype:
     """
-    flat_list = []
-    try:
-        work_geo = geometry.geoms if isinstance(geometry, (MultiLineString, MultiPolygon, MultiPoint)) else geometry
-        for geo in work_geo:
-            flat_list += flatten_shapely_geometry(geo)
-    except TypeError:
-        if geometry and not geometry.is_empty:
+    flat_list: list[BaseGeometry] = []
+
+    if isinstance(geometry, BaseMultipartGeometry):
+        for geo in geometry.geoms:
+            assert isinstance(geo, BaseGeometry)
+            flat_list.append(geo)
+    elif hasattr(geometry, "__iter__"):
+        for geo in geometry:
+            assert isinstance(geo, BaseGeometry)
+            flat_list.append(geo)
+    elif isinstance(geometry, BaseGeometry):
+        if not geometry.is_empty:
             if simplify_tolerance > 0.0:
                 flat_list.append(geometry.simplify(simplify_tolerance))
             else:
                 flat_list.append(geometry)
-
+    else:
+        raise NotImplementedError(f"No implementation for flattening {type(geometry)}")
     return flat_list
 
 
