@@ -2111,17 +2111,12 @@ class Gerber(Geometry):
             geos = [affinity.translate(affinity.scale(g, 1.0, -1.0, origin=(0, 0)), yoff=h) for g in geos]
             self.app.log.debug("appParsers.ParseGerber.Gerber.import_svg(). SVG geometry was flipped.")
 
-        # Add to object
-        if self.solid_geometry is None:
-            self.solid_geometry = []
-
-        # if type(self.solid_geometry) == list:
-        #     if type(geos) == list:
-        #         self.solid_geometry += geos
-        #     else:
-        #         self.solid_geometry.append(geos)
-        # else:  # It's shapely geometry
-        #     self.solid_geometry = [self.solid_geometry, geos]
+        # Work with a local list first because it makes typing a lot easier
+        solid_geometry: list[BaseGeometry] = []
+        if isinstance(self.solid_geometry, BaseGeometry):
+            solid_geometry.append(self.solid_geometry)
+        elif isinstance(self.solid_geometry, list):
+            solid_geometry += self.solid_geometry
 
         if type(geos) == list:
             # HACK for importing QRCODE exported by FlatCAM
@@ -2136,19 +2131,12 @@ class Gerber(Geometry):
                     geo_qrcode.append(Polygon(i_el).buffer(0, resolution=res))
                 geos = [poly for poly in geo_qrcode]
 
-            if type(self.solid_geometry) == list:
-                self.solid_geometry += geos
-            else:
-                geos.append(self.solid_geometry)
-                self.solid_geometry = geos
-        else:
-            if type(self.solid_geometry) == list:
-                self.solid_geometry.append(geos)
-            else:
-                self.solid_geometry = [self.solid_geometry, geos]
+            solid_geometry += geos
+        elif isinstance(geos, BaseGeometry):
+            solid_geometry.append(geos)
 
         # flatten the self.solid_geometry list for import_svg() to import SVG as Gerber
-        self.solid_geometry = flatten_shapely_geometry(self.solid_geometry)
+        solid_geometry = flatten_shapely_geometry(solid_geometry)
         if 0 not in self.tools:
             self.tools[0] = {
                 'type':         'REG',
@@ -2156,10 +2144,11 @@ class Gerber(Geometry):
                 'geometry':     []
             }
 
-        for pol in self.solid_geometry:
+        for pol in solid_geometry:
             prepare(pol)
             new_el = {'solid': pol, 'follow': LineString(pol.exterior.coords)}
             self.tools[0]['geometry'].append(new_el)
+        self.solid_geometry = solid_geometry
 
     def import_dxf_as_gerber(self, filename, units='MM', text_mode='stroke'):
         """
@@ -2204,24 +2193,25 @@ class Gerber(Geometry):
         except TypeError:
             geos.append(merged_lines)
 
-        # Add to object
-        if self.solid_geometry is None:
-            self.solid_geometry = []
+        # Work with a local list first because it makes typing a lot easier
+        solid_geometry: list[BaseGeometry] = []
+        if isinstance(self.solid_geometry, BaseGeometry):
+            solid_geometry.append(self.solid_geometry)
+        elif isinstance(self.solid_geometry, list):
+            solid_geometry += self.solid_geometry
 
-        if type(self.solid_geometry) is list:
-            if type(geos) is list:
-                self.solid_geometry += geos
-            else:
-                self.solid_geometry.append(geos)
-        else:  # It's shapely geometry
-            self.solid_geometry = [self.solid_geometry, geos]
+        if type(geos) is list:
+            solid_geometry += geos
+        elif isinstance(geos, BaseGeometry):
+            solid_geometry.append(geos)
 
-        # flatten the self.solid_geometry list for import_dxf() to import DXF as Gerber
-        flat_geo = list(self.flatten_list(self.solid_geometry))
+        # flatten the solid_geometry list for import_dxf() to import DXF as Gerber
+        flat_geo = list(self.flatten_list(solid_geometry))
         if flat_geo:
-            self.solid_geometry = unary_union(flat_geo)
-            prepare(self.solid_geometry)
-            self.follow_geometry = self.solid_geometry
+            solid_geometry = unary_union(flat_geo)
+            prepare(solid_geometry)
+            self.solid_geometry = solid_geometry
+            self.follow_geometry = solid_geometry
         else:
             return "fail"
 
