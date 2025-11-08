@@ -1468,7 +1468,8 @@ class ShapeCollectionLegacy:
         # if we don't use this then when adding each new shape, the old ones will be added again, too
         # if obj_type == 'utility':
         #     self.axes.patches.clear()
-        self.axes.patches.clear()
+        for p in self.axes.patches:
+            p.remove()
         for element in local_shapes:
             if local_shapes[element]['visible'] is True:
                 if obj_type == 'excellon':
