@@ -8,6 +8,10 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+12.03.2026
+
+- PDF Tool: refactoring the tool into its own folder
+
 8.10.2025
 
 - added some changes suggested by Matthew Kaprocki on bitbucket regarding new Gerber extensions 

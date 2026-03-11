@@ -28,7 +28,7 @@ from camlib import grace, flatten_shapely_geometry
 HAS_PIKE_MODULE = True
 try:
     from pikepdf import Pdf, parse_content_stream
-except ModuleNotFoundError:
+except Exception:
     HAS_PIKE_MODULE = False
 
 fcTranslate.apply_language('strings')
