@@ -10,3 +10,4 @@ build/
 .AppleDouble
 .LSOverride
 .vscode
+/.claude/

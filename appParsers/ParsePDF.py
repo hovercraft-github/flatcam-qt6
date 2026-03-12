@@ -991,21 +991,17 @@ class PdfParser:
         :return: A list of point coordinates tuples (x, y)
         """
 
-        # here we store the geometric points
-        points = []
-
-        nr_points = np.arange(0.0, 1.0, (1 / self.step_per_circles))
-        for t in nr_points:
-            term_p0 = (1 - t) ** 3
-            term_p1 = 3 * t * (1 - t) ** 2
-            term_p2 = 3 * (1 - t) * t ** 2
-            term_p3 = t ** 3
-
-            x = start[0] * term_p0 + c1[0] * term_p1 + c2[0] * term_p2 + stop[0] * term_p3
-            y = start[1] * term_p0 + c1[1] * term_p1 + c2[1] * term_p2 + stop[1] * term_p3
-            points.append([x, y])
-
-        return points
+        # Vectorized computation using NumPy
+        nr_points = np.linspace(0.0, 1.0, self.step_per_circles, endpoint=False)
+        t = nr_points
+        term_p0 = (1 - t) ** 3
+        term_p1 = 3 * t * (1 - t) ** 2
+        term_p2 = 3 * (1 - t) * t ** 2
+        term_p3 = t ** 3
+        x = start[0] * term_p0 + c1[0] * term_p1 + c2[0] * term_p2 + stop[0] * term_p3
+        y = start[1] * term_p0 + c1[1] * term_p1 + c2[1] * term_p2 + stop[1] * term_p3
+        points = np.column_stack((x, y))
+        return points.tolist()
 
     # def bezier_to_circle(self, path):
     #     lst = []

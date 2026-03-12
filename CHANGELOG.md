@@ -11,6 +11,7 @@ CHANGELOG for FlatCAM Evo beta
 12.03.2026
 
 - PDF Tool: refactoring the tool into its own folder
+- ParsePDF.py: refactoring the parser to use numpy for the bezier_to_circle method
 
 8.10.2025
 

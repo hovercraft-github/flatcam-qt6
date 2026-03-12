@@ -30,7 +30,7 @@ from appPlugins.ToolOptimal import ToolOptimal
 
 from appPlugins.ToolPanelize import Panelize
 from appPlugins.ToolPcbWizard import PcbWizard
-from appPlugins.ToolPDF import ToolPDF
+from appPlugins.PDF_CONVERSION.ToolPDF import ToolPDF
 from appPlugins.ToolReport import ObjectReport
 
 from appPlugins.ToolQRCode import QRCode
