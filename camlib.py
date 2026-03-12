@@ -7910,7 +7910,6 @@ def arc(center, radius, start, stop, direction, steps_per_circ):
     # TODO: Resolution should be established by maximum error from the exact arc.
 
     da_sign = {"cw": -1.0, "ccw": 1.0}
-    points = []
     if direction == "ccw" and stop <= start:
         stop += 2 * np.pi
     if direction == "cw" and stop >= start:
@@ -7921,10 +7920,10 @@ def arc(center, radius, start, stop, direction, steps_per_circ):
     # angle = stop-start
     steps = max([int(np.ceil(angle / (2 * np.pi) * steps_per_circ)), 2])
     delta_angle = da_sign[direction] * angle * 1.0 / steps
-    for i in range(steps + 1):
-        theta = start + delta_angle * i
-        points.append((center[0] + radius * np.cos(theta), center[1] + radius * np.sin(theta)))
-    return points
+    thetas = start + delta_angle * np.arange(steps + 1)
+    xs = center[0] + radius * np.cos(thetas)
+    ys = center[1] + radius * np.sin(thetas)
+    return list(zip(xs.tolist(), ys.tolist()))
 
 
 def arc2(p1, p2, center, direction, steps_per_circ):
