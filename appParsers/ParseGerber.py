@@ -752,22 +752,10 @@ class Gerber(Geometry):
                         # --- Buffered ---
                         try:
                             # self.app.log.debug("Bare op-code %d." % current_operation_code)
-                            geo_dict = {}
-                            flash = self.create_flash_geometry(
-                                Point(current_x, current_y), self.tools[current_aperture],
-                                self.steps_per_circle)
-
-                            geo_dict['follow'] = Point([current_x, current_y])
-
-                            if not flash.is_empty:
-                                prepare(flash)
-                                poly_buffer.append(flash)
-                                if self.is_lpc is True:
-                                    geo_dict['clear'] = flash
-                                else:
-                                    geo_dict['solid'] = flash
-
-                                self.tools.setdefault(current_aperture, {}).setdefault('geometry', []).append(geo_dict)
+                            self._add_flash_to_buffers(
+                                current_x, current_y, current_aperture, 
+                                poly_buffer, follow_buffer, self.steps_per_circle
+                            )
 
                         except IndexError:
                             self.app.log.warning("Line %d: %s -> Nothing there to flash!" % (line_num, gline))
@@ -1057,29 +1045,11 @@ class Gerber(Geometry):
                                 # is None
                                 if current_aperture is not None:
                                     # --- BUFFERED ---
-                                    # Draw the flash
-                                    # this treats the case when we are storing geometry as paths
-                                    geo_dict = {}
-                                    geo_flash = Point([current_x, current_y])
-                                    follow_buffer.append(geo_flash)
-                                    geo_dict['follow'] = geo_flash
-
-                                    # this treats the case when we are storing geometry as solids
-                                    flash = self.create_flash_geometry(
-                                        Point([current_x, current_y]),
-                                        self.tools[current_aperture],
-                                        self.steps_per_circle
+                                    # Draw the flash using helper
+                                    self._add_flash_to_buffers(
+                                        current_x, current_y, current_aperture,
+                                        poly_buffer, follow_buffer, self.steps_per_circle
                                     )
-                                    if not flash.is_empty:
-                                        prepare(flash)
-                                        poly_buffer.append(flash)
-
-                                        if self.is_lpc is True:
-                                            geo_dict['clear'] = flash
-                                        else:
-                                            geo_dict['solid'] = flash
-
-                                    self.tools.setdefault(current_aperture, {}).setdefault('geometry', []).append(geo_dict)
 
                             if making_region is False:
                                 # if the aperture is rectangle then add a rectangular shape having as parameters the
@@ -1274,30 +1244,11 @@ class Gerber(Geometry):
                         # --- BUFFERED ---
                         # Draw the flash
                         # this treats the case when we are storing geometry as paths
-
-                        geo_dict = {}
-                        geo_flash = Point([linear_x, linear_y])
-                        prepare(geo_flash)
-                        follow_buffer.append(geo_flash)
-                        geo_dict['follow'] = geo_flash
-
-                        # this treats the case when we are storing geometry as solids
-                        flash = self.create_flash_geometry(
-                            Point([linear_x, linear_y]),
-                            self.tools[current_aperture],
-                            self.steps_per_circle
+                        # Create flash geometry using helper
+                        self._add_flash_to_buffers(
+                            linear_x, linear_y, current_aperture,
+                            poly_buffer, follow_buffer, self.steps_per_circle
                         )
-
-                        if not flash.is_empty:
-                            prepare(flash)
-                            poly_buffer.append(flash)
-
-                            if self.is_lpc is True:
-                                geo_dict['clear'] = flash
-                            else:
-                                geo_dict['solid'] = flash
-
-                        self.tools.setdefault(current_aperture, {}).setdefault('geometry', []).append(geo_dict)
 
                     # maybe those lines are not exactly needed but it is easier to read the program as those coordinates
                     # are used in case that circular interpolation is encountered within the Gerber file
@@ -1799,6 +1750,45 @@ class Gerber(Geometry):
             self.tools.setdefault(aperture_id, {}).setdefault('geometry', []).append(geo_dict)
         
         return geo_s, geo_f, geo_dict
+
+    def _add_flash_to_buffers(self, x, y, aperture_id, poly_buffer, follow_buffer, steps):
+        """
+        Create a flash at the given position and add to buffers.
+        
+        :param x: X coordinate for flash
+        :param y: Y coordinate for flash
+        :param aperture_id: Aperture ID to use for flash geometry
+        :param poly_buffer: List to append solid geometry to
+        :param follow_buffer: List to append point geometry to
+        :param steps: Number of steps per circle for arc approximation
+        :return: geo_dict with flash geometry, or {} on error
+        """
+        geo_dict = {}
+        location = Point([x, y])
+        
+        # Add point to follow buffer
+        prepare(location)
+        follow_buffer.append(location)
+        geo_dict['follow'] = location
+        
+        # Create flash geometry
+        try:
+            flash = self.create_flash_geometry(location, self.tools[aperture_id], steps)
+            
+            if flash and not flash.is_empty:
+                prepare(flash)
+                poly_buffer.append(flash)
+                
+                if self.is_lpc is True:
+                    geo_dict['clear'] = flash
+                else:
+                    geo_dict['solid'] = flash
+                
+                self.tools.setdefault(aperture_id, {}).setdefault('geometry', []).append(geo_dict)
+        except (KeyError, TypeError) as e:
+            self.app.log.warning(f"Flash at ({x}, {y}) failed: {e}")
+        
+        return geo_dict
 
     def create_geometry(self):
         """
