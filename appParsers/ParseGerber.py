@@ -8,6 +8,7 @@ from appParsers.ParseSVG import svgparselength, getsvggeo, svgparse_viewbox
 import numpy as np
 import traceback
 from copy import deepcopy
+from typing import Dict, List, Optional, Tuple, Any, Union, Callable
 
 from shapely.ops import unary_union, linemerge
 import shapely.affinity as affinity
@@ -68,6 +69,24 @@ class Gerber(Geometry):
         do_something(s.solid_geometry)
 
     """
+
+    # Type annotations for instance attributes
+    tools: Dict[int, Dict[str, Any]]
+    aperture_macros: Dict[str, 'ApertureMacro']
+    solid_geometry: Any  # Union[Polygon, MultiPolygon, List[Polygon]] - complex type
+    follow_geometry: List[Any]
+    is_lpc: bool
+    source_file: str
+    int_digits: int
+    frac_digits: int
+    gerber_zeros: str
+    units: str
+    conversion_done: bool
+    defective_aperture_detected: bool
+    use_buffer_for_union: bool
+    steps_per_circle: int
+    decimals: int
+    ser_attrs: List[str]
 
     # defaults = {
     #     "steps_per_circle": 128,
@@ -247,7 +266,12 @@ class Gerber(Geometry):
         # from Geometry.
         self.ser_attrs += ['tools', 'int_digits', 'frac_digits', 'aperture_macros', 'solid_geometry', 'source_file']
 
-    def aperture_parse(self, apertureId, apertureType, apParameters):
+    def aperture_parse(
+        self,
+        apertureId: str,
+        apertureType: str,
+        apParameters: Optional[str]
+    ) -> Optional[int]:
         """
         Parse gerber aperture definition into dictionary of apertures.
         The following kinds and their attributes are supported:
@@ -325,7 +349,7 @@ class Gerber(Geometry):
         self.app.log.warning("Aperture not implemented: %s" % str(apertureType))
         return None
 
-    def parse_file(self, filename, follow=False):
+    def parse_file(self, filename: str, follow: bool = False) -> Optional[str]:
         """
         Calls Gerber.parse_lines() with generator of lines
         read from the given file. Will split the lines if multiple
@@ -396,7 +420,7 @@ class Gerber(Geometry):
                 return
 
     # @profile
-    def parse_lines(self, glines):
+    def parse_lines(self, glines: List[str]) -> Optional[str]:
         """
         Main Gerber parser. Reads Gerber and populates ``self.paths``, ``self.tools``,
         ``self.flashes``, ``self.regions`` and ``self.units``.
@@ -1629,7 +1653,12 @@ class Gerber(Geometry):
         if is_excellon_gx2 is True:
             return 'drill'
 
-    def create_flash_geometry(self, location, aperture, steps_per_circle=None):
+    def create_flash_geometry(
+        self,
+        location: Any,
+        aperture: Dict[str, Any],
+        steps_per_circle: Optional[int] = None
+    ) -> Any:
 
         # self.app.log.debug('Flashing @%s, Aperture: %s' % (location, aperture))
 
@@ -1689,8 +1718,15 @@ class Gerber(Geometry):
         self.app.log.warning("Unknown aperture type: %s" % aperture['type'])
         return None
 
-    def _add_path_geometry_to_buffers(self, path, aperture_id, poly_buffer, follow_buffer, 
-                                      steps, making_region=False):
+    def _add_path_geometry_to_buffers(
+        self,
+        path: List[List[float]],
+        aperture_id: Optional[int],
+        poly_buffer: List[Any],
+        follow_buffer: List[Any],
+        steps: int,
+        making_region: bool = False
+    ) -> Tuple[Optional[Any], Optional[Any], Dict[str, Any]]:
         """
         Add path geometry to poly_buffer and follow_buffer with proper geo_dict tracking.
         
@@ -1751,7 +1787,15 @@ class Gerber(Geometry):
         
         return geo_s, geo_f, geo_dict
 
-    def _add_flash_to_buffers(self, x, y, aperture_id, poly_buffer, follow_buffer, steps):
+    def _add_flash_to_buffers(
+        self,
+        x: float,
+        y: float,
+        aperture_id: Optional[int],
+        poly_buffer: List[Any],
+        follow_buffer: List[Any],
+        steps: int
+    ) -> Dict[str, Any]:
         """
         Create a flash at the given position and add to buffers.
         
@@ -2069,7 +2113,12 @@ class Gerber(Geometry):
             new_el = {'solid': pol, 'follow': pol}
             self.tools[0]['geometry'].append(new_el)
 
-    def scale(self, xfactor, yfactor=None, point=None):
+    def scale(
+        self,
+        xfactor: float,
+        yfactor: Optional[float] = None,
+        point: Optional[Tuple[float, float]] = None
+    ) -> Optional[str]:
         """
         Scales the objects' geometry on the XY plane by a given factor.
         These are:
@@ -2204,7 +2253,7 @@ class Gerber(Geometry):
         # # Now buffered_paths, flash_geometry and solid_geometry
         # self.create_geometry()
 
-    def offset(self, vect):
+    def offset(self, vect: Tuple[float, float]) -> Optional[str]:
         """
         Offsets the objects' geometry on the XY plane by a given vector.
         These are:
@@ -2290,7 +2339,7 @@ class Gerber(Geometry):
         self.app.inform.emit('[success] %s' % _("Done."))
         self.app.proc_container.new_text = ''
 
-    def mirror(self, axis, point):
+    def mirror(self, axis: str, point: List[float]) -> Optional[str]:
         """
         Mirrors the object around a specified axis passing through
         the given point. What is affected:
@@ -2365,7 +2414,7 @@ class Gerber(Geometry):
         self.app.inform.emit('[success] %s' % _("Done."))
         self.app.proc_container.new_text = ''
 
-    def skew(self, angle_x, angle_y, point):
+    def skew(self, angle_x: float, angle_y: float, point: List[float]) -> Optional[str]:
         """
         Shear/Skew the geometries of an object by angles along x and y dimensions.
 
@@ -2439,7 +2488,7 @@ class Gerber(Geometry):
         self.app.inform.emit('[success] %s' % _("Done."))
         self.app.proc_container.new_text = ''
 
-    def rotate(self, angle, point):
+    def rotate(self, angle: float, point: List[float]) -> Optional[str]:
         """
         Rotate an object by a given angle around given coords (point)
         :param angle:
@@ -2501,7 +2550,15 @@ class Gerber(Geometry):
         self.app.inform.emit('[success] %s' % _("Done."))
         self.app.proc_container.new_text = ''
 
-    def buffer(self, distance, join="mitre", factor=None, only_exterior=False, muted=False):
+    def buffer(
+        self,
+        distance: float,
+        join: str = "mitre",
+        factor: Optional[bool] = None,
+        only_exterior: bool = False,
+        muted: bool = False
+    ) -> None:
+
         """
 
         :param distance:        If 'factor' is True then distance is the factor
@@ -2657,7 +2714,12 @@ class Gerber(Geometry):
         self.app.proc_container.new_text = ''
 
 
-def parse_gerber_number(strnumber, int_digits, frac_digits, zeros):
+def parse_gerber_number(
+    strnumber: str,
+    int_digits: int,
+    frac_digits: int,
+    zeros: str
+) -> Optional[float]:
     """
     Parse a single number of Gerber coordinates.
 
