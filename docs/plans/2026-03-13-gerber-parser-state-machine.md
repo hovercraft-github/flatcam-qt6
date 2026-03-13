@@ -1,8 +1,15 @@
 # Gerber Parser State Machine Refactoring Plan
 
 > **STATUS: ABANDONED (2026-03-13)** - Refactoring was reverted after introducing breaking bugs. See "Post-Mortem" section for full analysis.
-
-> **For Future Maintainers:** DO NOT attempt this refactoring without first writing comprehensive automated tests for `parse_lines()`. The manual testing approach (load files in GUI) is insufficient for this scale of change.
+>
+> **CURRENT STATE:** Code uses original scattered variables approach + helper methods. See "Architecture Notes" in `parse_lines()` docstring.
+>
+> **FOR FUTURE MAINTAINERS:** DO NOT attempt state machine refactoring without first writing comprehensive automated tests. The manual testing approach (load files in GUI) is insufficient for this scale of change.
+>
+> **DOCUMENTATION ADDED:** 
+> - Architecture notes in `parse_lines()` docstring (2026-03-13)
+> - Test scaffolding in `tests/test_gerber_parser.py` (requires PyQt6 to run)
+> - Section header comments preserved throughout
 
 ---
 
@@ -21,6 +28,49 @@
 - ❌ `ParserState` dataclass
 - ❌ Direct `state.*` usage throughout `parse_lines()`
 - ❌ Helper method signature changes
+
+---
+
+## Current State (After Documentation Update 2026-03-13)
+
+### What the Code Actually Looks Like
+
+```
+appParsers/ParseGerber.py:
+├── Gerber class (line 33)
+│   ├── parse_lines() method (line 423)
+│   │   ├── ~20 scattered local variables (lines 437-486)
+│   │   │   └── Each has inline comment explaining purpose
+│   │   ├── Section header comments (### blocks)
+│   │   │   └── Explain Gerber spec requirements
+│   │   └── Architecture notes in docstring
+│   │       └── Why scattered variables, what's safe to change
+│   ├── _add_path_geometry_to_buffers() (line 1752)
+│   │   └── Extracted helper - reduces code duplication
+│   └── _add_flash_to_buffers() (line 1821)
+│       └── Extracted helper - flash geometry creation
+```
+
+### Documentation Added
+
+| File | Addition | Purpose |
+|------|----------|---------|
+| `appParsers/ParseGerber.py` | Architecture notes in `parse_lines()` docstring | Explain why scattered variables, warn against risky refactors |
+| `appParsers/ParseGerber.py` | Grouped variable comments | Make state organization clearer |
+| `tests/test_gerber_parser.py` | Test scaffolding (12 test cases) | Required before ANY future refactoring |
+| `docs/plans/2026-03-13-...` | Current state section | Document what actually exists |
+
+### Test Scaffolding Status
+
+Created: `tests/test_gerber_parser.py`
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Basic parsing | 6 | Scaffolded (requires PyQt6) |
+| Edge cases | 5 | Scaffolded (requires PyQt6) |
+| Unit handling | 2 | Scaffolded (requires PyQt6) |
+
+**Note:** Tests require PyQt6 (GUI framework). They can only be run in the full application environment.
 
 ---
 

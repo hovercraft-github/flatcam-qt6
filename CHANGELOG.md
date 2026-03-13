@@ -8,6 +8,10 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+14.03.2026 
+
+- ParseGerber: refactoring and optimization
+
 13.03.2026
 
 - ParsePDF upgrade and refactor

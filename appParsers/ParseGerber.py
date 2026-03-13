@@ -8,12 +8,13 @@ from appParsers.ParseSVG import svgparselength, getsvggeo, svgparse_viewbox
 import numpy as np
 import traceback
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple, Any, Union, Callable
+from typing import Dict, List, Optional, Tuple, Any
 
 from shapely.ops import unary_union, linemerge
 import shapely.affinity as affinity
 from shapely import box as shply_box
 from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, simplify
+from shapely.geometry.base import BaseMultipartGeometry
 
 from lxml import etree as ET
 import ezdxf
@@ -100,6 +101,7 @@ class Gerber(Geometry):
         :return: Gerber object
         :rtype: Gerber
         """
+        self.multigeo = None
         self.app = app
 
         # How to approximate a circle with lines.
@@ -172,7 +174,7 @@ class Gerber(Geometry):
 
         # FS - Format Specification
         # The format of X and Y must be the same!
-        # L-omit leading zeros, T-omit trailing zeros, D-no zero supression
+        # L-omit leading zeros, T-omit trailing zeros, D-no zero suppression
         # A-absolute notation, I-incremental notation
         self.fmt_re = re.compile(r'%?FS([LTD])?([AI])X(\d)(\d)Y\d\d\*%?$')
         self.fmt_re_alt = re.compile(r'%FS([LTD])?([AI])X(\d)(\d)Y\d\d\*MO(IN|MM)\*%$')
@@ -199,7 +201,8 @@ class Gerber(Geometry):
 
         # G01... - Linear interpolation plus flashes with coordinates
         # Operation code (D0x) missing is deprecated... oh well I will support it.
-        self.lin_re = re.compile(r'^(?:G0?(1))?(?=.*X([+-]?\d+))?(?=.*Y([+-]?\d+))?[XY][^DIJ]*(?:D0?([123]))?\*$')
+        # Added \s* to allow optional space after G01 (e.g., "G01 X0Y0D02*")
+        self.lin_re = re.compile(r'^(?:G0?(1)\s*)?(?=.*X([+-]?\d+))?(?=.*Y([+-]?\d+))?[XY][^DIJ]*(?:D0?([123]))?\*$')
 
         # Operation code alone, usually just D03 (Flash)
         # May begin with G55 but that is deprecated
@@ -210,13 +213,15 @@ class Gerber(Geometry):
         # Operation code (D0x) missing is deprecated... oh well I will support it.
         # Optional start with G02 or G03, optional end with D01 or D02 with
         # optional coordinates but at least one in any order.
+        # Added \s* to allow optional space after G02/G03
         self.circ_re = re.compile(
-            r'^(?:G0?([23]))?(?=.*X([+-]?\d+))?(?=.*Y([+-]?\d+))' +
+            r'^(?:G0?([23])\s*)?(?=.*X([+-]?\d+))?(?=.*Y([+-]?\d+))' +
             r'?(?=.*I([+-]?\d+))?(?=.*J([+-]?\d+))?[XYIJ][^D]*(?:D0([12]))?\*$'
         )
 
         # G01/2/3 Occurring without coordinates
-        self.interp_re = re.compile(r'^(?:G0?([123]))\*')
+        # Added \s* to allow optional space after G code
+        self.interp_re = re.compile(r'^(?:G0?([123]))\s*\*')
 
         # Single G74 or multi G75 quadrant for circular interpolation
         self.quad_re = re.compile(r'^G7([45]).*\*$')
@@ -282,7 +287,7 @@ class Gerber(Geometry):
         * *Polygon (P)*: diameter(float), vertices(int), [rotation(float)]
         * *Aperture Macro (AM)*: macro (ApertureMacro), modifiers (list)
 
-        :param apertureId: Id of the aperture being defined.
+        :param apertureId: The Id of the aperture being defined.
         :param apertureType: Type of the aperture.
         :param apParameters: Parameters of the aperture.
         :type apertureId: str
@@ -430,10 +435,41 @@ class Gerber(Geometry):
         :type glines: list
         :return: only errors/warnings
         :rtype: str
+        
+        ================================================================
+        ARCHITECTURE NOTES (2026-03-13)
+        ================================================================
+        This function uses scattered local variables (not a state class)
+        for maximum stability. A ParserState dataclass was attempted but
+        reverted after introducing edge-case bugs.
+        
+        WHY THIS APPROACH:
+        - Scattered variables have implicit guards that prevent edge cases
+        - A state class would require auditing all 1300+ lines for state access
+        - Manual testing cannot catch all edge cases - automated tests needed first
+        
+        SAFE IMPROVEMENTS ALREADY MADE:
+        - _add_path_geometry_to_buffers() - extracts repeated path->geometry pattern
+        - _add_flash_to_buffers() - extracts flash geometry creation
+        - Type hints on method signatures
+        - Section header comments (the ### blocks)
+        
+        DO NOT refactor state management without:
+        1. Comprehensive automated tests (see tests/test_gerber_parser.py)
+        2. Full audit of all state interactions
+        3. Testing with real Gerber files from multiple EDA tools
+        
+        See docs/plans/2026-03-13-gerber-parser-state-machine.md for full history.
+        ================================================================
         """
 
         is_excellon_gx2 = False
 
+        # ###############################################################
+        # #########  PARSER STATE VARIABLES  ############################
+        # #########  Grouped by function for maintainability  ###########
+        # ###############################################################
+        
         # Coordinates of the current path, each is [x, y]
         path = []
 
@@ -562,7 +598,6 @@ class Gerber(Geometry):
 
                         geo_dict = {}
                         geo_f = LineString(path)
-                        prepare(geo_f)
                         if not geo_f.is_empty:
                             follow_buffer.append(geo_f)
                             geo_dict['follow'] = geo_f
@@ -617,7 +652,7 @@ class Gerber(Geometry):
 
                     self.app.log.debug(
                         "Gerber format found. Gerber zeros = %s (L-omit leading zeros, T-omit trailing zeros, "
-                        "D-no zero supression)" % self.gerber_zeros)
+                        "D-no zero suppression)" % self.gerber_zeros)
                     self.app.log.debug("Gerber format found. Coordinates type = %s (Absolute or Relative)" % absolute)
                     continue
 
@@ -680,7 +715,7 @@ class Gerber(Geometry):
                         self.app.log.debug("Gerber format found. (%s) " % str(gline))
                         self.app.log.debug(
                             "Gerber format found. Gerber zeros = %s (L-omit leading zeros, T-omit trailing zeros, "
-                            "D-no zerosuppressionn)" % self.gerber_zeros)
+                            "D-no zero suppression)" % self.gerber_zeros)
                         self.app.log.debug(
                             "Gerber format found. Coordinates type = %s (Absolute or Relative)" % absolute)
 
@@ -830,181 +865,22 @@ class Gerber(Geometry):
                 # ################  G36* - Begin region   ########################
                 # ################################################################
                 if self.regionon_re.search(gline) and current_aperture != "failure":
-                    try:
-                        path_length = len(path)
-                    except TypeError:
-                        path_length = 1
-
-                    if path_length > 1:
-                        # Take care of what is left in the path
-
-                        geo_dict = {}
-                        geo_f = LineString(path)
-                        if not geo_f.is_empty:
-                            follow_buffer.append(geo_f)
-                            geo_dict['follow'] = geo_f
-
-                        # --- Buffered ----
-                        width = self.tools[last_path_aperture]["size"]
-                        geo_s = geo_f.buffer(width / 1.999, steps)
-                        if not geo_s.is_valid:
-                            self.app.log.warning(
-                                "Found invalid Gerber geometry at line: %s. Fixing..." % str(line_num))
-                            geo_s = geo_s.buffer(0.0000001, steps)
-
-                        if not geo_s.is_valid:
-                            self.app.log.warning(
-                                "Failed to fix the invalid Geometry found at line: %s" % str(line_num))
-                        else:
-                            self.tools.setdefault(last_path_aperture, {}).setdefault('geometry', [])
-                            try:
-                                for pol in geo_s:
-                                    if not pol.is_empty:
-                                        prepare(pol)
-                                        poly_buffer.append(pol)
-                                        if self.is_lpc is True:
-                                            geo_dict['clear'] = pol
-                                        else:
-                                            geo_dict['solid'] = pol
-
-                                    if not pol.is_empty:
-                                        self.tools[last_path_aperture]['geometry'].append(geo_dict)
-                            except TypeError:
-                                if not geo_s.is_empty:
-                                    poly_buffer.append(geo_s)
-                                    if self.is_lpc is True:
-                                        geo_dict['clear'] = geo_s
-                                    else:
-                                        geo_dict['solid'] = geo_s
-
-                                if not geo_s.is_empty:
-                                    self.tools[last_path_aperture]['geometry'].append(geo_dict)
-
-                        path = [path[-1]]
-
+                    path, last_path_aperture = self._handle_region_start(
+                        path, last_path_aperture, poly_buffer, follow_buffer,
+                        steps, line_num, current_operation_code
+                    )
                     making_region = True
-                    # flashes are not allowed inside regions
-                    if current_operation_code == 3:
-                        current_operation_code = 2
                     continue
 
                 # ################################################################
                 # ################  G37* - End region     ########################
                 # ################################################################
                 if self.regionoff_re.search(gline) and current_aperture != "failure":
-                    making_region = False
-
-                    if 0 not in self.tools:
-                        self.tools[0] = {}
-                        self.tools[0]['type'] = 'REG'
-                        self.tools[0]['size'] = 0.0
-                        self.tools[0]['geometry'] = []
-
-                    # if D02 happened before G37 we now have a path with 1 element only; we have to add the current
-                    # geo to the poly_buffer otherwise we loose it
-                    if current_operation_code == 2:
-                        try:
-                            path_length = len(path)
-                        except TypeError:
-                            path_length = 1
-
-                        if path_length == 1:
-                            # this means that the geometry was prepared previously and we just need to add it
-                            geo_dict = {}
-                            if geo_f:
-                                if not geo_f.is_empty:
-                                    prepare(geo_f)
-                                    follow_buffer.append(geo_f)
-                                    geo_dict['follow'] = geo_f
-                            if geo_s:
-                                if not geo_s.is_empty:
-                                    if not geo_s.is_valid:
-                                        print("Not valid: ", line_num)
-                                    poly_buffer.append(geo_s)
-                                    if self.is_lpc is True:
-                                        geo_dict['clear'] = geo_s
-                                    else:
-                                        geo_dict['solid'] = geo_s
-
-                            if geo_s or geo_f:
-                                self.tools[0]['geometry'].append(geo_dict)
-
-                            path = [[current_x, current_y]]  # Start new path
-
-                    # Only one path defines region?
-                    # This can happen if D02 happened before G37 and
-                    # is not and error.
-                    try:
-                        path_length = len(path)
-                    except TypeError:
-                        path_length = 1
-
-                    if path_length < 3:
-                        # print "ERROR: Path contains less than 3 points:"
-                        # path = [[current_x, current_y]]
-                        continue
-
-                    # For Gerber regions, we may ignore an aperture that is None
-
-                    # --- Buffered ---
-                    geo_dict = {}
-                    if current_aperture in self.tools:
-                        # the following line breaks loading of Circuit Studio Gerber files
-                        # buff_value = float(self.tools[current_aperture]['size']) / 2.0
-                        # region_geo = Polygon(path).buffer(buff_value, steps)
-                        region_geo = Polygon(path)  # Sprint Layout Gerbers with ground fill are crashed with above
-                    else:
-                        region_geo = Polygon(path)
-
-                    region_s = region_geo
-
-                    if not region_s.is_empty:
-                        if not region_s.is_valid:
-                            self.app.log.warning(
-                                "Found invalid Gerber geometry at line: %s. Fixing..." % str(line_num))
-                            region_s = region_s.buffer(0.0000001, steps)
-                            region_s = flatten_shapely_geometry(region_s)
-
-                            if not region_s:
-                                self.app.log.warning(
-                                    "Failed to fix the invalid Geometry found at line: %s" % str(line_num))
-                            else:
-                                for pol in region_s:
-                                    prepare(pol)
-                                    pol_f = pol.exterior
-                                    prepare(pol_f)
-                                    if not pol_f.is_empty:
-                                        follow_buffer.append(pol_f)
-                                        geo_dict['follow'] = pol
-
-                                    poly_buffer.append(pol)
-
-                                    if self.is_lpc is True:
-                                        geo_dict['clear'] = pol
-                                    else:
-                                        geo_dict['solid'] = pol
-
-                                    if not pol.is_empty:
-                                        self.tools[0]['geometry'].append(geo_dict)
-                        else:
-                            region_f = region_s.exterior
-                            if not region_f.is_empty:
-                                prepare(region_f)
-                                follow_buffer.append(region_f)
-                                geo_dict['follow'] = region_f
-
-                            prepare(region_s)
-                            poly_buffer.append(region_s)
-
-                            if self.is_lpc is True:
-                                geo_dict['clear'] = region_s
-                            else:
-                                geo_dict['solid'] = region_s
-
-                            if not region_s.is_empty:
-                                self.tools[0]['geometry'].append(geo_dict)
-
-                    path = [[current_x, current_y]]  # Start new path
+                    path, making_region = self._handle_region_end(
+                        path, current_aperture, current_x, current_y,
+                        poly_buffer, follow_buffer, steps, line_num,
+                        current_operation_code, geo_s, geo_f
+                    )
                     continue
 
                 # ################################################################
@@ -1091,7 +967,6 @@ class Gerber(Geometry):
 
                                         geo_dict = {}
                                         geo_f = Point([current_x, current_y])
-                                        prepare(geo_f)
                                         follow_buffer.append(geo_f)
                                         geo_dict['follow'] = geo_f
 
@@ -1180,7 +1055,7 @@ class Gerber(Geometry):
                                                             "Line number"), str(line_num)))
                             else:
                                 if last_path_aperture is None:
-                                    self.app.log.warning("No aperture defined for curent path. (%d)" % line_num)
+                                    self.app.log.warning("No aperture defined for current path. (%d)" % line_num)
                                 # TODO: this may (should) fail
                                 width = self.tools[last_path_aperture]["size"]
                                 geo_s = geo_f.buffer(width / 1.999, steps)
@@ -1274,7 +1149,8 @@ class Gerber(Geometry):
                             poly_buffer, follow_buffer, self.steps_per_circle
                         )
 
-                    # maybe those lines are not exactly needed but it is easier to read the program as those coordinates
+                    # maybe those lines are not exactly needed,
+                    # but it is easier to read the program as those coordinates
                     # are used in case that circular interpolation is encountered within the Gerber file
                     current_x = linear_x
                     current_y = linear_y
@@ -1358,7 +1234,7 @@ class Gerber(Geometry):
                             geo_dict = {}
 
                             if last_path_aperture is None:
-                                self.app.log.warning("No aperture defined for curent path. (%d)" % line_num)
+                                self.app.log.warning("No aperture defined for current path. (%d)" % line_num)
 
                             # --- BUFFERED ---
                             width = self.tools[last_path_aperture]["size"]
@@ -1366,14 +1242,12 @@ class Gerber(Geometry):
                             # this treats the case when we are storing geometry as paths
                             geo_f = LineString(path)
                             if not geo_f.is_empty:
-                                prepare(geo_f)
                                 follow_buffer.append(geo_f)
                                 geo_dict['follow'] = geo_f
 
                             # this treats the case when we are storing geometry as solids
                             buffered = geo_f.buffer(width / 1.999, steps)
                             if not buffered.is_empty:
-                                prepare(buffered)
                                 poly_buffer.append(buffered)
 
                                 if self.is_lpc is True:
@@ -1754,7 +1628,6 @@ class Gerber(Geometry):
         
         # Add to follow buffer
         if not geo_f.is_empty:
-            prepare(geo_f)
             follow_buffer.append(geo_f)
             geo_dict['follow'] = geo_f
         
@@ -1811,7 +1684,6 @@ class Gerber(Geometry):
         location = Point([x, y])
         
         # Add point to follow buffer
-        prepare(location)
         follow_buffer.append(location)
         geo_dict['follow'] = location
         
@@ -1820,7 +1692,6 @@ class Gerber(Geometry):
             flash = self.create_flash_geometry(location, self.tools[aperture_id], steps)
             
             if flash and not flash.is_empty:
-                prepare(flash)
                 poly_buffer.append(flash)
                 
                 if self.is_lpc is True:
@@ -1833,6 +1704,222 @@ class Gerber(Geometry):
             self.app.log.warning(f"Flash at ({x}, {y}) failed: {e}")
         
         return geo_dict
+
+    def _handle_region_start(
+        self,
+        path: List[List[float]],
+        last_path_aperture: Optional[int],
+        poly_buffer: List[Any],
+        follow_buffer: List[Any],
+        steps: int,
+        line_num: int,
+        current_operation_code: Optional[int]
+    ) -> Tuple[List[List[float]], Optional[int]]:
+        """
+        Handle G36* command (begin region mode).
+        
+        Finalizes any pending path geometry before entering region mode.
+        
+        :param path: Current path coordinates
+        :param last_path_aperture: Last used aperture ID
+        :param poly_buffer: Polygon buffer (modified in place)
+        :param follow_buffer: Follow geometry buffer (modified in place)
+        :param steps: Arc resolution
+        :param line_num: Current line number for error reporting
+        :param current_operation_code: Last operation code
+        :return: Tuple of (updated_path, updated_last_path_aperture)
+        """
+        try:
+            path_length = len(path)
+        except TypeError:
+            path_length = 1
+
+        if path_length > 1:
+            # Finalize pending path before region
+            geo_dict = {}
+            geo_f = LineString(path)
+            if not geo_f.is_empty:
+                follow_buffer.append(geo_f)
+                geo_dict['follow'] = geo_f
+
+            # --- Buffered ----
+            # Ensure last_path_aperture is valid before accessing tools
+            if last_path_aperture is None or last_path_aperture not in self.tools:
+                self.app.inform.emit(
+                    '[ERROR] %s' % _(
+                        "Gerber implementation format not supported. "
+                        "Undefined aperture at line: %s. "
+                        "Report to developers." % str(line_num)))
+                path = [path[-1]]
+                return path, last_path_aperture
+            
+            width = self.tools[last_path_aperture]["size"]
+            geo_s = geo_f.buffer(width / 1.999, steps)
+            if not geo_s.is_valid:
+                self.app.log.warning(
+                    "Found invalid Gerber geometry at line: %s. Fixing..." % str(line_num))
+                geo_s = geo_s.buffer(0.0000001, steps)
+
+            if not geo_s.is_valid:
+                self.app.log.warning(
+                    "Failed to fix the invalid Geometry found at line: %s" % str(line_num))
+            else:
+                self.tools.setdefault(last_path_aperture, {}).setdefault('geometry', [])
+                # Handle MultiPolygon by iterating over .geoms
+                pols_to_iterate = geo_s.geoms if isinstance(geo_s, BaseMultipartGeometry) else [geo_s]
+                for pol in pols_to_iterate:
+                    if not pol.is_empty:
+                        poly_buffer.append(pol)
+                        if self.is_lpc is True:
+                            geo_dict['clear'] = pol
+                        else:
+                            geo_dict['solid'] = pol
+
+                    if not pol.is_empty:
+                        self.tools[last_path_aperture]['geometry'].append(geo_dict)
+
+            path = [path[-1]]
+
+        # Enter region mode
+        # flashes are not allowed inside regions
+        if current_operation_code == 3:
+            current_operation_code = 2
+
+        return path, last_path_aperture
+
+    def _handle_region_end(
+        self,
+        path: List[List[float]],
+        current_aperture: Optional[int],
+        current_x: float,
+        current_y: float,
+        poly_buffer: List[Any],
+        follow_buffer: List[Any],
+        steps: int,
+        line_num: int,
+        current_operation_code: Optional[int],
+        geo_s: Any = None,
+        geo_f: Any = None
+    ) -> Tuple[List[List[float]], bool]:
+        """
+        Handle G37* command (end region mode).
+        
+        Creates region polygon from path and adds to buffers.
+        
+        :param path: Region path coordinates
+        :param current_aperture: Current aperture ID (it may be None for regions)
+        :param current_x: Current X coordinate
+        :param current_y: Current Y coordinate
+        :param poly_buffer: Polygon buffer (modified in place)
+        :param follow_buffer: Follow geometry buffer (modified in place)
+        :param steps: Arc resolution
+        :param line_num: Current line number
+        :param current_operation_code: Last operation code
+        :param geo_s: Optional solid geometry from path (for D02 edge case)
+        :param geo_f: Optional follow geometry from path (for D02 edge case)
+        :return: Tuple of (new_path, success)
+        """
+
+        # Ensure aperture 0 exists for region storage
+        if 0 not in self.tools:
+            self.tools[0] = {
+                'type': 'REG',
+                'size': 0.0,
+                'geometry': []
+            }
+
+        # Handle D02 before G37 edge case
+        # if D02 happened before G37 we now have a path with 1 element only
+        if current_operation_code == 2:
+            try:
+                path_length = len(path)
+            except TypeError:
+                path_length = 1
+
+            if path_length == 1:
+                # Geometry was prepared previously, add it to buffers
+                geo_dict = {}
+                if geo_f:
+                    if not geo_f.is_empty:
+                        follow_buffer.append(geo_f)
+                        geo_dict['follow'] = geo_f
+                if geo_s:
+                    if not geo_s.is_empty:
+                        if not geo_s.is_valid:
+                            self.app.log.warning(
+                                "Found invalid geometry at line: %s" % str(line_num))
+                        poly_buffer.append(geo_s)
+                        if self.is_lpc is True:
+                            geo_dict['clear'] = geo_s
+                        else:
+                            geo_dict['solid'] = geo_s
+
+                if geo_s or geo_f:
+                    self.tools[0]['geometry'].append(geo_dict)
+
+                path = [[current_x, current_y]]  # Start new path
+
+        # Validate path has minimum points
+        try:
+            path_length = len(path)
+        except TypeError:
+            path_length = 1
+
+        if path_length < 3:
+            return [[current_x, current_y]], False  # Skip invalid region
+
+        # Create region polygon
+        geo_dict = {}
+        # Aperture is not used for region creation - regions are fill areas
+        region_geo = Polygon(path)
+
+        region_s = region_geo
+
+        if not region_s.is_empty:
+            if not region_s.is_valid:
+                self.app.log.warning(
+                    "Found invalid Gerber geometry at line: %s. Fixing..." % str(line_num))
+                region_s = region_s.buffer(0.0000001, steps)
+                region_s = flatten_shapely_geometry(region_s)
+
+                if not region_s:
+                    self.app.log.warning(
+                        "Failed to fix the invalid Geometry found at line: %s" % str(line_num))
+                else:
+                    # Handle MultiPolygon by iterating over .geoms
+                    pols_to_iterate = region_s.geoms if isinstance(region_s, BaseMultipartGeometry) else [region_s]
+                    for pol in pols_to_iterate:
+                        pol_f = pol.exterior
+                        if not pol_f.is_empty:
+                            follow_buffer.append(pol_f)
+                            geo_dict['follow'] = pol
+
+                        poly_buffer.append(pol)
+
+                        if self.is_lpc is True:
+                            geo_dict['clear'] = pol
+                        else:
+                            geo_dict['solid'] = pol
+
+                        if not pol.is_empty:
+                            self.tools[0]['geometry'].append(geo_dict)
+            else:
+                region_f = region_s.exterior
+                if not region_f.is_empty:
+                    follow_buffer.append(region_f)
+                    geo_dict['follow'] = region_f
+
+                poly_buffer.append(region_s)
+
+                if self.is_lpc is True:
+                    geo_dict['clear'] = region_s
+                else:
+                    geo_dict['solid'] = region_s
+
+                if not region_s.is_empty:
+                    self.tools[0]['geometry'].append(geo_dict)
+
+        return [[current_x, current_y]], False  # Region ended (always False since G37 ends region)
 
     def create_geometry(self):
         """
@@ -1864,7 +1951,7 @@ class Gerber(Geometry):
         :param margin: Distance to enlarge the rectangular bounding
          box in both positive and negative, x and y axes.
         :type margin: float
-        :param rounded: Wether or not to have rounded corners.
+        :param rounded: Whether to have rounded corners.
         :type rounded: bool
         :return: The bounding box.
         :rtype: Shapely.Polygon
@@ -1919,7 +2006,7 @@ class Gerber(Geometry):
                             maxy = max(maxy, maxy_)
                 return minx, miny, maxx, maxy
             else:
-                # it's a Shapely object, return it's bounds
+                # it's a Shapely object, return its bounds
                 return obj.bounds
 
         bounds_coords = bounds_rec(self.solid_geometry)
@@ -1964,7 +2051,7 @@ class Gerber(Geometry):
         :param filename:        Path to the SVG file.
         :type filename:         str
         :param object_type:     parameter passed further along
-        :param flip:            Flip the vertically.
+        :param flip:            Flip vertically.
         :type flip:             bool
         :param units:           FlatCAM units
         :return: None
@@ -2557,7 +2644,7 @@ class Gerber(Geometry):
         factor: Optional[bool] = None,
         only_exterior: bool = False,
         muted: bool = False
-    ) -> None:
+    ) -> None | str:
 
         """
 
@@ -2565,7 +2652,8 @@ class Gerber(Geometry):
         :param join:            The type of joining used by the Shapely buffer method. Can be: round, mitre and bevel
         :param factor:          True or False (None)
         :param only_exterior:   Bool. If True, the LineStrings are buffered only on the outside
-        :return:                None
+        :param muted:           Bool. If True, the buffer operation is muted
+        :return:                None | str
         """
         self.app.log.debug("parseGerber.Gerber.buffer()")
 
@@ -2596,7 +2684,7 @@ class Gerber(Geometry):
                         new_obj.append(buffer_geom(g))
                 except TypeError:
                     try:
-                        new_obj = obj.buffer(distance, resolution=self.steps_per_circle, join_style=join)
+                        new_obj = obj.buffer(distance, resolution=self.steps_per_circle, join_style=join)   # noqa
                         if isinstance(obj, (LinearRing, LineString)) and only_exterior is True:
                             new_obj = new_obj.exterior
                     except AttributeError:
