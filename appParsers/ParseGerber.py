@@ -808,26 +808,9 @@ class Gerber(Geometry):
                             # do nothing because 'R' type moving aperture is none at once
                             pass
                         else:
-                            geo_dict = {}
-                            geo_f = LineString(path)
-                            prepare(geo_f)
-                            if not geo_f.is_empty:
-                                follow_buffer.append(geo_f)
-                                geo_dict['follow'] = geo_f
-
-                            # --- Buffered ----
-                            width = self.tools[last_path_aperture]["size"]
-                            geo_s = geo_f.buffer(width / 1.999, steps)
-                            if not geo_s.is_empty:
-                                poly_buffer.append(geo_s)
-
-                                if self.is_lpc is True:
-                                    geo_dict['clear'] = geo_s
-                                else:
-                                    geo_dict['solid'] = geo_s
-
-                            self.tools.setdefault(last_path_aperture, {}).setdefault('geometry', []).append(geo_dict)
-
+                            geo_s, geo_f, geo_dict = self._add_path_geometry_to_buffers(
+                                path, last_path_aperture, poly_buffer, follow_buffer, steps
+                            )
                             path = [path[-1]]
                     continue
 
@@ -1556,27 +1539,9 @@ class Gerber(Geometry):
                 else:
                     # EOF, create shapely LineString if something still in path
                     # ## --- Buffered ---
-
-                    geo_dict = {}
-                    # this treats the case when we are storing geometry as paths
-                    geo_f = LineString(path)
-                    if not geo_f.is_empty:
-                        prepare(geo_f)
-                        follow_buffer.append(geo_f)
-                        geo_dict['follow'] = geo_f
-
-                    # this treats the case when we are storing geometry as solids
-                    width = self.tools[last_path_aperture]["size"]
-                    geo_s = geo_f.buffer(width / 1.999, steps)
-                    if not geo_s.is_empty:
-                        poly_buffer.append(geo_s)
-
-                        if self.is_lpc is True:
-                            geo_dict['clear'] = geo_s
-                        else:
-                            geo_dict['solid'] = geo_s
-
-                    self.tools.setdefault(last_path_aperture, {}).setdefault('geometry', []).append(geo_dict)
+                    geo_s, geo_f, geo_dict = self._add_path_geometry_to_buffers(
+                        path, last_path_aperture, poly_buffer, follow_buffer, steps
+                    )
 
             # Build source_file from accumulated lines
             self.source_file = '\n'.join(source_lines) + '\n'
@@ -1772,6 +1737,68 @@ class Gerber(Geometry):
 
         self.app.log.warning("Unknown aperture type: %s" % aperture['type'])
         return None
+
+    def _add_path_geometry_to_buffers(self, path, aperture_id, poly_buffer, follow_buffer, 
+                                      steps, making_region=False):
+        """
+        Add path geometry to poly_buffer and follow_buffer with proper geo_dict tracking.
+        
+        This extracts the repeated pattern of converting a path (list of [x,y] points)
+        into Shapely geometry and adding it to the appropriate buffers.
+        
+        :param path: List of [x, y] coordinate pairs
+        :param aperture_id: ID of the aperture to use for buffering width
+        :param poly_buffer: List to append solid geometry to
+        :param follow_buffer: List to append line geometry to
+        :param steps: Number of steps per circle for arc approximation
+        :param making_region: If True, creates Polygon instead of buffered LineString
+        :return: Tuple of (geo_s, geo_f, geo_dict) or (None, None, {}) if path is empty
+        """
+        if len(path) < 2:
+            return None, None, {}
+        
+        geo_dict = {}
+        
+        # Create follow geometry (line or polygon boundary)
+        if making_region:
+            geo_f = Polygon(path)
+        else:
+            geo_f = LineString(path)
+        
+        # Add to follow buffer
+        if not geo_f.is_empty:
+            prepare(geo_f)
+            follow_buffer.append(geo_f)
+            geo_dict['follow'] = geo_f
+        
+        # Create solid geometry (buffered for traces, plain for regions)
+        if making_region:
+            geo_s = geo_f
+        else:
+            try:
+                width = self.tools[aperture_id]["size"]
+                geo_s = geo_f.buffer(width / 1.999, steps)
+            except (KeyError, TypeError):
+                geo_s = None
+        
+        # Add to poly buffer
+        if geo_s and not geo_s.is_empty:
+            if not geo_s.is_valid:
+                self.app.log.warning("Found invalid Gerber geometry. Attempting fix...")
+                geo_s = geo_s.buffer(0.0000001, steps)
+            
+            if geo_s and not geo_s.is_empty:
+                poly_buffer.append(geo_s)
+                if self.is_lpc is True:
+                    geo_dict['clear'] = geo_s
+                else:
+                    geo_dict['solid'] = geo_s
+        
+        # Store in aperture geometry tracking
+        if aperture_id is not None and (geo_s or geo_f):
+            self.tools.setdefault(aperture_id, {}).setdefault('geometry', []).append(geo_dict)
+        
+        return geo_s, geo_f, geo_dict
 
     def create_geometry(self):
         """
