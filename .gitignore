@@ -11,3 +11,5 @@ build/
 .LSOverride
 .vscode
 /.claude/
+/.planning/
+/.worktrees/

@@ -68,7 +68,8 @@ class ToolPDF(AppTool):
 
         self.parser = PdfParser(units=self.app.app_units,
                                 resolution=self.app.options["gerber_circle_steps"],
-                                abort=self.app.abort_flag)
+                                abort=self.app.abort_flag,
+                                hole_detection_mode='both')  # Default: detect on both stroke and fill
 
     def run(self, toggle=True):
         self.app.defaults.report_usage("ToolPDF()")
@@ -249,6 +250,11 @@ class ToolPDF(AppTool):
 
             new_obj.tools = {}
 
+            # First pass: collect all (center, diameter) pairs
+            # Key: rounded center (x, y), Value: (actual_center, diameter)
+            all_holes = {}
+            precision = 2  # Decimal places for center comparison
+
             for geo in clear_geo:
                 xmin, ymin, xmax, ymax = geo.bounds
                 center = (((xmax - xmin) / 2) + xmin, ((ymax - ymin) / 2) + ymin)
@@ -257,6 +263,20 @@ class ToolPDF(AppTool):
                 correction_factor = 0.974
                 dia = (xmax - xmin) * correction_factor
                 dia = round(dia, 3)
+
+                # Round center for deduplication
+                center_key = (round(center[0], precision), round(center[1], precision))
+
+                # Keep smaller diameter if center already exists
+                if center_key in all_holes:
+                    existing_dia = all_holes[center_key][1]
+                    if dia < existing_dia:
+                        all_holes[center_key] = (center, dia)
+                else:
+                    all_holes[center_key] = (center, dia)
+
+            # Group by diameter
+            for center_key, (center, dia) in all_holes.items():
                 if dia in points:
                     points[dia].append(center)
                 else:

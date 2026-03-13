@@ -8,6 +8,10 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+13.03.2026
+
+- ParsePDF upgrade and refactor
+
 12.03.2026
 
 - PDF Tool: refactoring the tool into its own folder
