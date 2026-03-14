@@ -88,13 +88,10 @@ from appGUI.preferences.OptionsGroupUI import OptionsGroupUI
 from appGUI.preferences.PreferencesUIManager import PreferencesUIManager
 from appObjects.ObjectCollection import ObjectCollection, GerberObject, ExcellonObject, GeometryObject, \
     CNCJobObject, ScriptObject, DocumentObject
-from appObjects.AppObjectTemplate import FlatCAMObj
 from appObjects.AppObject import AppObject
 
 # App Parsing files
-from appParsers.ParseExcellon import Excellon
-from appParsers.ParseGerber import Gerber
-from camlib import to_dict, Geometry, CNCjob
+from camlib import to_dict
 
 # App Pre-processors
 from appPreProcessor import load_preprocessors
@@ -116,7 +113,7 @@ from appPlugins import *
 try:
     from numpy import Inf
 except ImportError:
-    from numpy import inf as Inf
+    from numpy import inf as Inf    # noqa
 
 # App Translation
 import gettext
@@ -352,6 +349,7 @@ class App(QtCore.QObject):
         # variable to store mouse coordinates
         self._mouse_click_pos = [0, 0]
         self._mouse_pos = [0, 0]
+        self.mouse_down = None
 
         # variable to store the delta positions on canvas
         self.dx = 0
@@ -5855,6 +5853,7 @@ class App(QtCore.QObject):
         """
         event_pos = event.pos if self.use_3d_engine else (event.xdata, event.ydata)
         pos_canvas = self.plotcanvas.translate_coords(event_pos)
+        self.mouse_down = True
 
         # So it can receive key presses
         self.plotcanvas.native.setFocus()
@@ -5895,12 +5894,10 @@ class App(QtCore.QObject):
         if self.use_3d_engine:
             event_pos = event.pos
             pan_button = 2 if self.options["global_pan_button"] == '2' else 3
-            self.event_is_dragging = event.is_dragging
+            # self.event_is_dragging = event.is_dragging
+            self.event_is_dragging = self.mouse_down
         else:
             event_pos = (event.xdata, event.ydata)
-            # Matplotlib has the middle and right buttons mapped in reverse compared with VisPy
-            pan_button = 3 if self.options["global_pan_button"] == '2' else 2
-            self.event_is_dragging = self.plotcanvas.is_dragging
 
         # So it can receive key presses but not when the Tcl Shell is active
         if not self.ui.shell_dock.isVisible():
@@ -5923,94 +5920,124 @@ class App(QtCore.QObject):
                 self.ui.popMenu.mouse_is_panning = True
                 return
 
-        if self.rel_point1 is not None:
-            try:  # May fail in case mouse not within axes
-                pos_canvas = self.plotcanvas.translate_coords(event_pos)
+        if self.rel_point1 is None:
+            return
 
-                if pos_canvas[0] is None or pos_canvas[1] is None:
-                    return
+        try:  # May fail in case mouse not within axes
+            pos_canvas = self.plotcanvas.translate_coords(event_pos)
+            if pos_canvas[0] is None or pos_canvas[1] is None:
+                return
 
-                if self.grid_status():
-                    pos = self.geo_editor.snap(pos_canvas[0], pos_canvas[1])
+            if self.grid_status():
+                pos = self.geo_editor.snap(pos_canvas[0], pos_canvas[1])
 
-                    # Update cursor
-                    self.app_cursor.set_data(np.asarray([(pos[0], pos[1])]),
-                                             symbol='++', edge_color=self.plotcanvas.cursor_color,
-                                             edge_width=self.options["global_cursor_width"],
-                                             size=self.options["global_cursor_size"])
+                # Update cursor
+                self.app_cursor.set_data(
+                    np.asarray([(pos[0], pos[1])]),
+                    symbol='++', edge_color=self.plotcanvas.cursor_color,
+                    edge_width=self.options["global_cursor_width"],
+                    size=self.options["global_cursor_size"]
+                )
+            else:
+                pos = (pos_canvas[0], pos_canvas[1])
+
+            self.dx = pos[0] - float(self.rel_point1[0])
+            self.dy = pos[1] - float(self.rel_point1[1])
+
+            self.ui.update_location_labels(self.dx, self.dy, pos[0], pos[1])
+            self.plotcanvas.on_update_text_hud(self.dx, self.dy, pos[0], pos[1])
+
+            self.mouse_pos = [pos[0], pos[1]]
+
+            if self.options['global_selection_shape'] is False:
+                self.selection_type = None
+                return
+
+            # the object selection on canvas does not work for App Tools or for Editors
+            if self.call_source != 'app':
+                self.selection_type = None
+                return
+
+            # if the mouse is moved and the LMB is clicked then the action is a selection
+            we_have_drag_selection = False
+            if self.use_3d_engine:
+                # Calculate threshold based on visible area (~3 screen pixels worth)
+                try:
+                    rect_width = self.plotcanvas.view.camera.rect.width
+                    canvas_width = self.plotcanvas.native.width()
+                    move_threshold = 3 * (rect_width / canvas_width)
+                except (AttributeError, ZeroDivisionError):
+                    move_threshold = 0.01  # Fallback
+                if (
+                        self.event_is_dragging
+                        and (abs(self.dx) > move_threshold or abs(self.dy) > move_threshold)
+                        and event.button == 1
+                ):
+                    we_have_drag_selection = True
+
+            else:
+                we_have_drag_selection = False
+                # we don't need to monitor movement for matplotlib 2D engine, is already taken care
+                if self.event_is_dragging and event.button == 1:
+                    we_have_drag_selection = True
+
+            self.selection_type = None  # no selection while mouse is moving
+            if we_have_drag_selection:
+                self.delete_selection_shape()
+
+                is_alt_selection = self.dx < 0
+                if is_alt_selection:
+                    self.draw_moving_selection_shape(
+                        self.mouse_click_pos,
+                        self.mouse_pos,
+                        color=self.options['global_alt_sel_line'],
+                        face_color=self.options['global_alt_sel_fill']
+                    )
                 else:
-                    pos = (pos_canvas[0], pos_canvas[1])
+                    self.draw_moving_selection_shape(
+                        self.mouse_click_pos,
+                        self.mouse_pos
+                    )
 
-                self.dx = pos[0] - float(self.rel_point1[0])
-                self.dy = pos[1] - float(self.rel_point1[1])
+                self.selection_type = not is_alt_selection  # True for regular selection, False for alt selection
 
-                self.ui.update_location_labels(self.dx, self.dy, pos[0], pos[1])
-                self.plotcanvas.on_update_text_hud(self.dx, self.dy, pos[0], pos[1])
+            # hover effect - enabled in Preferences -> General -> appGUI Settings
+            if self.options['global_hover_shape']:
+                for obj in self.collection.get_list():
+                    try:
+                        # select the object(s) only if it is enabled (plotted)
+                        if obj.obj_options['plot']:
+                            if obj not in self.collection.get_selected():
+                                poly_obj = Polygon(
+                                    [(obj.obj_options['xmin'], obj.obj_options['ymin']),
+                                     (obj.obj_options['xmax'], obj.obj_options['ymin']),
+                                     (obj.obj_options['xmax'], obj.obj_options['ymax']),
+                                     (obj.obj_options['xmin'], obj.obj_options['ymax'])]
+                                )
+                                if Point(pos).within(poly_obj):
+                                    if obj.isHovering is False:
+                                        obj.isHovering = True
+                                        obj.notHovering = True
+                                        # create the selection box around the selected object
+                                        self.draw_hover_shape(obj, color='#d1e0e0FF')
+                                else:
+                                    if obj.notHovering is True:
+                                        obj.notHovering = False
+                                        obj.isHovering = False
+                                        self.delete_hover_shape()
+                    except Exception:
+                        # the Exception here will happen if we try to select on screen, and we have a
+                        # newly (and empty) just created Geometry or Excellon object that do not have the
+                        # xmin, xmax, ymin, ymax options.
+                        # In this case poly_obj creation (see above) will fail
+                        pass
 
-                self.mouse_pos = [pos[0], pos[1]]
-
-                if self.options['global_selection_shape'] is False:
-                    self.selection_type = None
-                    return
-
-                # the object selection on canvas does not work for App Tools or for Editors
-                if self.call_source != 'app':
-                    self.selection_type = None
-                    return
-
-                # if the mouse is moved and the LMB is clicked then the action is a selection
-                if self.event_is_dragging == 1 and event.button == 1:
-                    self.delete_selection_shape()
-                    if self.dx < 0:
-                        self.draw_moving_selection_shape(self.mouse_click_pos, self.mouse_pos,
-                                                         color=self.options['global_alt_sel_line'],
-                                                         face_color=self.options['global_alt_sel_fill'])
-                        self.selection_type = False
-                    elif self.dx >= 0:
-                        self.draw_moving_selection_shape(self.mouse_click_pos, self.mouse_pos)
-                        self.selection_type = True
-                    else:
-                        self.selection_type = None
-                else:
-                    self.selection_type = None
-
-                # hover effect - enabled in Preferences -> General -> appGUI Settings
-                if self.options['global_hover_shape']:
-                    for obj in self.collection.get_list():
-                        try:
-                            # select the object(s) only if it is enabled (plotted)
-                            if obj.obj_options['plot']:
-                                if obj not in self.collection.get_selected():
-                                    poly_obj = Polygon(
-                                        [(obj.obj_options['xmin'], obj.obj_options['ymin']),
-                                         (obj.obj_options['xmax'], obj.obj_options['ymin']),
-                                         (obj.obj_options['xmax'], obj.obj_options['ymax']),
-                                         (obj.obj_options['xmin'], obj.obj_options['ymax'])]
-                                    )
-                                    if Point(pos).within(poly_obj):
-                                        if obj.isHovering is False:
-                                            obj.isHovering = True
-                                            obj.notHovering = True
-                                            # create the selection box around the selected object
-                                            self.draw_hover_shape(obj, color='#d1e0e0FF')
-                                    else:
-                                        if obj.notHovering is True:
-                                            obj.notHovering = False
-                                            obj.isHovering = False
-                                            self.delete_hover_shape()
-                        except Exception:
-                            # the Exception here will happen if we try to select on screen, and we have a
-                            # newly (and empty) just created Geometry or Excellon object that do not have the
-                            # xmin, xmax, ymin, ymax options.
-                            # In this case poly_obj creation (see above) will fail
-                            pass
-
-            except Exception as e:
-                self.log.error("App.on_mouse_move_over_plot() - rel_point1 is not None -> %s" % str(e))
-                # self.ui.position_label.setText("")
-                # self.ui.rel_position_label.setText("")
-                self.ui.update_location_labels(0.0, 0.0, 0.0, 0.0)
-                self.mouse_pos = [None, None]
+        except Exception as e:
+            self.log.error("App.on_mouse_move_over_plot() - rel_point1 is not None -> %s" % str(e))
+            # self.ui.position_label.setText("")
+            # self.ui.rel_position_label.setText("")
+            self.ui.update_location_labels(0.0, 0.0, 0.0, 0.0)
+            self.mouse_pos = [None, None]
 
     def on_mouse_click_release_over_plot(self, event):
         """
@@ -6019,6 +6046,7 @@ class App(QtCore.QObject):
         :param event: contains information about the event.
         :return:
         """
+        self.mouse_down = False
 
         if self.use_3d_engine:
             event_pos = event.pos
@@ -6049,7 +6077,7 @@ class App(QtCore.QObject):
             key_modifier = QtWidgets.QApplication.keyboardModifiers()
             shift_modifier_key = QtCore.Qt.KeyboardModifier.ShiftModifier
             ctrl_modifier_key = QtCore.Qt.KeyboardModifier.ControlModifier
-            ctrl_shift_modifier_key = ctrl_modifier_key | shift_modifier_key
+            ctrl_shift_modifier_key = ctrl_modifier_key | shift_modifier_key    # noqa
 
             # this will do click release action for the Plugins
             if key_modifier == shift_modifier_key or key_modifier == ctrl_shift_modifier_key:
@@ -6131,7 +6159,7 @@ class App(QtCore.QObject):
         Called when the mouse is left-clicked on canvas and simultaneously a key modifier
         (Ctrl, AAlt, Shift) is pressed.
 
-        :param position:        A tupple made of the clicked position x, y coordinates
+        :param position:        A tuple made of the clicked position x, y coordinates
         :param modifiers:       Key modifiers (Ctrl, Alt, Shift or a combination of them)
         :return:
         """
@@ -6227,49 +6255,104 @@ class App(QtCore.QObject):
         :param sel_type:    if True it's a left to right selection (enclosure), if False it's a 'touch' selection
         :return:            None
         """
-        # delete previous selection shape
-        self.delete_selection_shape()
+
+        # Force canvas update before heavy selection operation
+        QtWidgets.QApplication.processEvents()
 
         poly_selection = Polygon([start_pos, (end_pos[0], start_pos[1]), end_pos, (start_pos[0], end_pos[1])])
 
-        # make all objects inactive
-        self.collection.set_all_inactive()
+        sel_obj_list = []
+        collection_list = self.collection.get_list()
+        for idx, obj in enumerate(collection_list):
+            is_plotted = obj.obj_options.get("plot", False)
+            if not is_plotted:
+                continue
 
-        for obj in self.collection.get_list():
+            x_min = obj.obj_options.get("xmin", 0)
+            x_max = obj.obj_options.get("xmax", 0)
+            y_min = obj.obj_options.get("ymin", 0)
+            y_max = obj.obj_options.get("ymax", 0)
+
             try:
-                # select the object(s) only if it is enabled (plotted)
-                if obj.obj_options['plot']:
-                    # it's a line without area
-                    if obj.obj_options['xmin'] == obj.obj_options['xmax'] or \
-                            obj.obj_options['ymin'] == obj.obj_options['ymax']:
-                        poly_obj = unary_union(obj.solid_geometry).buffer(0.001)
-                    # it's a geometry with area
-                    else:
-                        poly_obj = Polygon([(obj.obj_options['xmin'], obj.obj_options['ymin']),
-                                            (obj.obj_options['xmax'], obj.obj_options['ymin']),
-                                            (obj.obj_options['xmax'], obj.obj_options['ymax']),
-                                            (obj.obj_options['xmin'], obj.obj_options['ymax'])])
-                    if poly_obj.is_empty or not poly_obj.is_valid:
-                        continue
+                # it's a line without area
+                if x_min == x_max or y_min == y_max:
+                    poly_obj = unary_union(obj.solid_geometry).buffer(0.001)
+                # it's a geometry with area
+                else:
+                    poly_obj = Polygon([
+                        (x_min, y_min),
+                        (x_max, y_min),
+                        (x_max, y_max),
+                        (x_min, y_max)
+                    ])
+                if poly_obj.is_empty or not poly_obj.is_valid:
+                    continue
 
-                    if sel_type is True:
-                        if poly_obj.within(poly_selection):
-                            # create the selection box around the selected object
-                            if self.options['global_selection_shape'] is True:
-                                self.draw_selection_shape(obj)
-                            self.collection.set_active(obj.obj_options['name'])
-                    else:
-                        if poly_selection.intersects(poly_obj):
-                            # create the selection box around the selected object
-                            if self.options['global_selection_shape'] is True:
-                                self.draw_selection_shape(obj)
-                            self.collection.set_active(obj.obj_options['name'])
-                    obj.selection_shape_drawn = True
+                is_selected = poly_obj.within(poly_selection) if sel_type else poly_selection.intersects(poly_obj)
+                if is_selected:
+                    sel_obj_list.append(idx)
             except Exception as e:
                 # the Exception here will happen if we try to select on screen, and we have a newly (and empty)
                 # just created Geometry or Excellon object that do not have the xmin, xmax, ymin, ymax options.
                 # In this case poly_obj creation (see above) will fail
                 self.log.error("App.selection_area_handler() --> %s" % str(e))
+
+        # delete previous selection shape
+        self.delete_selection_shape()
+
+        for idx in sel_obj_list:
+            sel_obj = collection_list[idx]
+            if self.options['global_selection_shape']:
+                self.draw_selection_shape(sel_obj)
+
+        # make all objects inactive
+        self.collection.set_all_inactive()
+        for idx in sel_obj_list:
+            sel_obj = collection_list[idx]
+            self.collection.set_active(sel_obj.obj_options['name'])
+            sel_obj.selection_shape_drawn = True
+
+        # for obj in collection_list:
+        #     try:
+        #         # select the object(s) only if it is enabled (plotted)
+        #         if obj.obj_options['plot']:
+        #             # it's a line without area
+        #             if (
+        #                     obj.obj_options['xmin'] == obj.obj_options['xmax']
+        #                     or obj.obj_options['ymin'] == obj.obj_options['ymax']
+        #             ):
+        #                 poly_obj = unary_union(obj.solid_geometry).buffer(0.001)
+        #             # it's a geometry with area
+        #             else:
+        #                 poly_obj = Polygon([(obj.obj_options['xmin'], obj.obj_options['ymin']),
+        #                                     (obj.obj_options['xmax'], obj.obj_options['ymin']),
+        #                                     (obj.obj_options['xmax'], obj.obj_options['ymax']),
+        #                                     (obj.obj_options['xmin'], obj.obj_options['ymax'])])
+        #             if poly_obj.is_empty or not poly_obj.is_valid:
+        #                 continue
+        #
+        #             is_selected = poly_obj.within(poly_selection) if sel_type else poly_selection.intersects(poly_obj)
+        #             if is_selected:
+        #                 self.collection.set_active(obj.obj_options['name'])
+        #                 # delete previous selection shape
+        #                 self.delete_selection_shape()
+        #                 if self.options['global_selection_shape']:
+        #                     self.draw_selection_shape(obj)
+        #             else:
+        #                 # delete previous selection shape
+        #                 self.delete_selection_shape()
+        #
+        #             obj.selection_shape_drawn = True
+        #         else:
+        #             # delete previous selection shape
+        #             self.delete_selection_shape()
+        #     except Exception as e:
+        #         # the Exception here will happen if we try to select on screen, and we have a newly (and empty)
+        #         # just created Geometry or Excellon object that do not have the xmin, xmax, ymin, ymax options.
+        #         # In this case poly_obj creation (see above) will fail
+        #         self.log.error("App.selection_area_handler() --> %s" % str(e))
+        #         # delete previous selection shape
+        #         self.delete_selection_shape()
 
     def select_objects(self, key=None):
         """
@@ -6557,18 +6640,22 @@ class App(QtCore.QObject):
         if sel_obj is None:
             return
 
+        x_min = sel_obj.obj_options.get("xmin", 0.0)
+        y_min = sel_obj.obj_options.get("ymin", 0.0)
+        x_max = sel_obj.obj_options.get("xmax", 0.0)
+        y_max = sel_obj.obj_options.get("ymax", 0.0)
+
         # it's a line without area
-        if sel_obj.obj_options['xmin'] == sel_obj.obj_options['xmax'] or \
-                sel_obj.obj_options['ymin'] == sel_obj.obj_options['ymax']:
+        if x_min == x_max or y_min == y_max:
             sel_rect = unary_union(sel_obj.solid_geometry).buffer(0.100001)
         # it's a geometry with area
         else:
-            pt1 = (float(sel_obj.obj_options['xmin']), float(sel_obj.obj_options['ymin']))
-            pt2 = (float(sel_obj.obj_options['xmax']), float(sel_obj.obj_options['ymin']))
-            pt3 = (float(sel_obj.obj_options['xmax']), float(sel_obj.obj_options['ymax']))
-            pt4 = (float(sel_obj.obj_options['xmin']), float(sel_obj.obj_options['ymax']))
-
-            sel_rect = Polygon([pt1, pt2, pt3, pt4])
+            sel_rect = Polygon([
+                (x_min, y_min),
+                (x_max, y_min),
+                (x_max, y_max),
+                (x_min, y_max)
+            ])
 
         b_sel_rect = None
         try:
@@ -6647,6 +6734,8 @@ class App(QtCore.QObject):
         color_t = face_color[:-2] + str(hex(int(face_alpha * 255)))[2:]
 
         self.sel_shapes.add(sel_rect, color=color, face_color=color_t, update=True, layer=0, tolerance=None)
+
+        # Only redraw if not in 3D engine (or defer redraw)
         if self.use_3d_engine is False:
             self.sel_shapes.redraw()
 

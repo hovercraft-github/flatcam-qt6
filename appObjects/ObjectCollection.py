@@ -1086,7 +1086,7 @@ class ObjectCollection(QtCore.QAbstractItemModel):
         return obj_list
 
     def update_view(self):
-        self.dataChanged.emit(QtCore.QModelIndex(), QtCore.QModelIndex())   # noqa
+        self.layoutChanged.emit()
 
     def on_row_activated(self, index):
         if index.isValid():

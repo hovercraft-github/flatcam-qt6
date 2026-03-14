@@ -11,6 +11,9 @@ CHANGELOG for FlatCAM Evo beta
 14.03.2026 
 
 - ParseGerber: refactoring and optimization
+- appMain: some refactoring and fixed the annoying issue with the selection shape being left on the screen when moving fast
+- ParseGerber: fixed an issue with setting an already existing list into another list
+- ObjectCollection: fixed an issue with the index of the objects not being valid for a specific case
 
 13.03.2026
 

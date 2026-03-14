@@ -1887,7 +1887,7 @@ class Gerber(Geometry):
                         "Failed to fix the invalid Geometry found at line: %s" % str(line_num))
                 else:
                     # Handle MultiPolygon by iterating over .geoms
-                    pols_to_iterate = region_s.geoms if isinstance(region_s, BaseMultipartGeometry) else [region_s]
+                    pols_to_iterate = region_s.geoms if isinstance(region_s, BaseMultipartGeometry) else region_s
                     for pol in pols_to_iterate:
                         pol_f = pol.exterior
                         if not pol_f.is_empty:
