@@ -2,6 +2,7 @@ name: flatcam
 channels:
 - conda-forge
 dependencies:
+- PyQt6
 - darkdetect
 - dill
 - ezdxf

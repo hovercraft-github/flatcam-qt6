@@ -240,7 +240,7 @@ class App(QtCore.QObject):
     # close app signal
     close_app_signal = pyqtSignal()
     # will perform the cleanup operation after a Graceful Exit
-    # usefull for the NCC Tool and Paint Tool where some progressive plotting might leave
+    # useful for the NCC Tool and Paint Tool where some progressive plotting might leave
     # graphic residues behind
     cleanup = pyqtSignal()
     # emitted when the new_project is created in a threaded way
@@ -442,7 +442,7 @@ class App(QtCore.QObject):
         # depending on from where those tools are called different actions can be done
         self.call_source = 'app'
 
-        # this is a flag to signal to other tools that the ui tooltab is locked and not accessible
+        # this is a flag to signal to other tools that the ui tool tab is locked and not accessible
         self.plugin_tab_locked = False
 
         # ############################################################################################################
@@ -502,7 +502,6 @@ class App(QtCore.QObject):
                 pass
 
             if portable is False:
-                # self.data_path = shell.SHGetFolderPath(0, shellcon.CSIDL_APPDATA, None, 0) + '\\FlatCAM'
                 self.data_path = os.path.join(os.getenv('appdata'), 'FlatCAM')
             else:
                 self.data_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + '\\config'
@@ -576,9 +575,6 @@ class App(QtCore.QObject):
         # Application directory. CHDIR to it. Otherwise, trying to load GUI icons will fail as their path is relative.
         # This will fail under cx_freeze ...
         self.app_home = os.path.dirname(os.path.realpath(__file__))
-
-        # self.log.debug("Application path is " + self.app_home)
-        # self.log.debug("Started in " + os.getcwd())
 
         # cx_freeze workaround
         if os.path.isfile(self.app_home):
@@ -1399,8 +1395,8 @@ class App(QtCore.QObject):
 
         # accept some type file as command line parameter: FlatCAM project, FlatCAM preferences or scripts
         # the path/file_name must be enclosed in quotes, if it contains spaces
-        if App.args:
-            self.args_at_startup.emit(App.args)
+        if App.args:    # noqa
+            self.args_at_startup.emit(App.args)     # noqa
 
         if self.defaults.old_defaults_found is True:
             self.inform.emit('[WARNING_NOTCL] %s' % _("Found old default preferences files. "
@@ -1453,7 +1449,7 @@ class App(QtCore.QObject):
         if args is not None:
             args_to_process = args
         else:
-            args_to_process = App.args
+            args_to_process = App.args      # noqa
 
         self.log.debug("Application was started with arguments: %s. Processing ..." % str(args_to_process))
         for argument in args_to_process:
@@ -2147,7 +2143,7 @@ class App(QtCore.QObject):
         Set the toolbars layout (location).
 
         :param connect_signals: Useful when used in the App.__init__(); bool
-        :param lay:             Type of layout to be set on the toolbard
+        :param lay:             Type of layout to be set on the toolbar
         :return:                None
         """
 
@@ -2966,7 +2962,7 @@ class App(QtCore.QObject):
                 self.resize(600, 200)
                 # self.setStyleSheet("background-image: url(share/flatcam_icon256.png); background-attachment: fixed")
                 # self.setStyleSheet(
-                #     "border-image: url(share/flatcam_icon256.png) 0 0 0 0 compact compact; "
+                #     "border-image: url(share/flatcam_icon256.png) 0 0 0 0 compact compact; "  # noqa
                 #     "background-attachment: fixed"
                 # )
 
@@ -3994,7 +3990,7 @@ class App(QtCore.QObject):
 
         if state == QtCore.Qt.CheckState.Checked:
             data[line_no] = 'portable=True\n'
-            # create the new defauults files
+            # create the new defaults files
             # create current_defaults.FlatConfig file if there is none
             try:
                 f = open(current_data_path + '/current_defaults.FlatConfig')
@@ -4315,7 +4311,7 @@ class App(QtCore.QObject):
             return
 
         if self.use_3d_engine is False:
-            # Remove plot only if the object was plotted otherwise delaxes will fail
+            # Remove plot only if the object was plotted otherwise will fail
             if isPlotted:
                 try:
                     self.plotcanvas.figure.delaxes(self.collection.get_active().shapes.axes)
@@ -4412,7 +4408,7 @@ class App(QtCore.QObject):
 
                 app_obj.inform.emit('[success] %s...' % _('Origin set'))
 
-                # update the source_file container with the new offseted code
+                # update the source_file container with the new offset code
                 for obj in obj_list:
                     out_name = obj.obj_options["name"]
 
@@ -4820,8 +4816,8 @@ class App(QtCore.QObject):
                 return minx, miny, maxx, maxy
             except TypeError:
                 # it's an App object, return its bounds
-                if obj:
-                    return obj.bounds()
+                if obj:     # this needs to be more descritibe perhaps with type hints
+                    return obj.bounds()     # noqa
 
         bounds = bounds_rec(obj_list)   # noqa
 
@@ -5891,6 +5887,7 @@ class App(QtCore.QObject):
         :return:                None
         """
 
+        pan_button = None
         if self.use_3d_engine:
             event_pos = event.pos
             pan_button = 2 if self.options["global_pan_button"] == '2' else 3
@@ -6164,6 +6161,8 @@ class App(QtCore.QObject):
         :return:
         """
 
+        ctrl_shift_mod = QtCore.Qt.KeyboardModifier.ControlModifier | QtCore.Qt.KeyboardModifier.ShiftModifier  # noqa
+
         # If the SHIFT key is pressed when LMB is clicked then the coordinates are copied to clipboard
         if modifiers == QtCore.Qt.KeyboardModifier.ShiftModifier:
             # do not auto open the Project Tab
@@ -6172,7 +6171,7 @@ class App(QtCore.QObject):
             self.clipboard.setText(self.options["global_point_clipboard_format"] %
                                    (self.decimals, position[0], self.decimals, position[1]))
             self.inform.emit('[success] %s' % _("Copied to clipboard."))
-        elif modifiers == QtCore.Qt.KeyboardModifier.ControlModifier | QtCore.Qt.KeyboardModifier.ShiftModifier:
+        elif modifiers == ctrl_shift_mod:
             try:
                 old_clipb = eval(self.clipboard.text())
             except Exception:
@@ -6603,7 +6602,7 @@ class App(QtCore.QObject):
             hover_rect = hover_rect.buffer(-0.00393)
             hover_rect = hover_rect.buffer(0.00787)
 
-        # if color:
+        # if color is True:
         #     face = Color(color)
         #     face.alpha = 0.2
         #     outline = Color(color, alpha=0.8)
@@ -7974,7 +7973,7 @@ class App(QtCore.QObject):
         self.shell.open_processing()  # Disables input box.
 
         old_line = ''
-        # set tcl info script to actual scriptfile
+        # set tcl info script to actual script file
 
         set_tcl_script_name = '''proc procExists p {{
                             return uplevel 1 [expr {{[llength [info command $p]] > 0}}]
