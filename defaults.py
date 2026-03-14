@@ -104,6 +104,8 @@ class AppDefaults:
         "global_tpdf_lmargin": 20.0,
         "global_tpdf_rmargin": 20.0,
 
+        "pdf_python_parser": True,
+
         # General GUI Preferences
         "global_appearance": 'default',
         "global_dark_canvas": False,

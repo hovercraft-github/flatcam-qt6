@@ -15,6 +15,7 @@ CHANGELOG for FlatCAM Evo beta
 - ParseGerber: fixed an issue with setting an already existing list into another list
 - ObjectCollection: fixed an issue with the index of the objects not being valid for a specific case
 - dealt with linter warnings in appMain.py
+- ToolPDF: added an alternative pure python parser and made the pikepdf mode optional
 
 13.03.2026
 

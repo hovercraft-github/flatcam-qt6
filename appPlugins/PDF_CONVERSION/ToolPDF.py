@@ -23,13 +23,11 @@ import appTranslation as fcTranslate
 import builtins
 
 from appParsers.ParsePDF import PdfParser
+from appParsers.PdfStreamParser import (
+    get_pdf_parser,
+    PdfParserError,
+)
 from camlib import grace, flatten_shapely_geometry
-
-HAS_PIKE_MODULE = True
-try:
-    from pikepdf import Pdf, parse_content_stream
-except Exception:
-    HAS_PIKE_MODULE = False
 
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
@@ -71,6 +69,12 @@ class ToolPDF(AppTool):
                                 abort=self.app.abort_flag,
                                 hole_detection_mode='both')  # Default: detect on both stroke and fill
 
+        # Initialize PDF stream parser based on defaults.py configuration
+        # pdf_python_parser=True (default) -> pure-python parser
+        # pdf_python_parser=False -> pikepdf parser (lazy import)
+        self.pdf_stream_parser = get_pdf_parser(self.app.defaults)
+        self.app.log.info(f"PDF stream parser initialized: {self.pdf_stream_parser.name}")
+
     def run(self, toggle=True):
         self.app.defaults.report_usage("ToolPDF()")
 
@@ -91,7 +95,8 @@ class ToolPDF(AppTool):
         """
 
         self.app.defaults.report_usage("ToolPDF.on_open_pdf_click()")
-        self.app.log.debug("ToolPDF.on_open_pdf_click()")
+        self.app.log.debug("ToolPDF was called. Launching....")
+        self.app.log.info(f"ToolPDF PDF: using stream parser: {self.pdf_stream_parser.name}")
 
         _filter_ = "Adobe PDF Files (*.pdf);;" \
                    "All Files (*.*)"
@@ -118,9 +123,10 @@ class ToolPDF(AppTool):
             self.app.inform.emit('[ERROR_NOTCL] %s' % _("File no longer available."))
             return
 
-        if HAS_PIKE_MODULE is False:
+        # Check if parser is available (should always be, since pure-python is always available)
+        if not self.pdf_stream_parser.is_available():
             self.app.inform.emit('[ERROR_NOTCL] %s' % _("Failed."))
-            self.app.log.error("PikePDF module is not available.")
+            self.app.log.error(f"PDF parser '{self.pdf_stream_parser.name}' is not available")
             return
 
         short_name = filename.split('/')[-1].split('\\')[-1]
@@ -138,84 +144,21 @@ class ToolPDF(AppTool):
             raise grace
 
         with self.app.proc_container.new('%s...' % _("Parsing")):
-            with open(filename, "rb") as f:
-                # pdf = f.read()
-                pdf = Pdf.open(f)
-
-                page = pdf.pages[0]
-                decomp_file = ''
-                for operands, command in parse_content_stream(page):
-                    line = ''
-                    for op in operands:
-                        try:
-                            line += str(op) + ' '
-                        except Exception:
-                            # print(str(e), operands, command)
-                            pass
-                    line += str(command)
-                    decomp_file += line + '\n'
-            self.pdf_decompressed[short_name] = decomp_file
-
-            # stream_nr = 0
-            # for s in re.findall(self.stream_re, pdf):
-            #     if self.app.abort_flag:
-            #         # graceful abort requested by the user
-            #         raise grace
-            #
-            #     stream_nr += 1
-            #     log.debug("PDF STREAM: %d\n" % stream_nr)
-            #     s = s.strip(b'\r\n')
-            #
-            #     # https://stackoverflow.com/questions/1089662/python-inflate-and-deflate-implementations
-            #     # def decompress(data):
-            #     #     decompressed = zlib.decompressobj(
-            #     #         -zlib.MAX_WBITS  # see above
-            #     #     )
-            #     #     inflated = decompressed.decompress(data)
-            #     #     inflated += decompressed.flush()
-            #     #     return inflated
-            #
-            #     Convert 2 Bytes If Python 3
-            #     def C2BIP3(string):
-            #         if type(string) == bytes:
-            #             return string
-            #         else:
-            #             return bytes([ord(x) for x in string])
-            #
-            #     def inflate(data):
-            #         try:
-            #             return zlib.decompress(C2BIP3(data))
-            #         except Exception:
-            #             if len(data) <= 10:
-            #                 raise
-            #             oDecompress = zlib.decompressobj(-zlib.MAX_WBITS)
-            #             oStringIO = BytesIO()
-            #             count = 0
-            #             for byte in C2BIP3(data):
-            #                 try:
-            #                     oStringIO.write(oDecompress.decompress(byte))
-            #                     count += 1
-            #                 except Exception:
-            #                     break
-            #             if len(data) - count <= 2:
-            #                 return oStringIO.getvalue()
-            #             else:
-            #                 raise
-            #
-            #     try:
-            #         decomp = inflate(s)
-            #     except Exception as e:
-            #         decomp = None
-            #         log.debug("ToolPDF.open_pdf() -> inflate (decompress) -> %s" % str(e))
-            #
-            #     try:
-            #         self.pdf_decompressed[short_name] += (decomp.decode('UTF-8') + '\r\n')
-            #     except Exception:
-            #         try:
-            #             self.pdf_decompressed[short_name] += (decomp.decode('latin1') + '\r\n')
-            #         except Exception as e:
-            #             log.error("ToolPDF.open_pdf() -> decoding error -> %s" % str(e))
-            #     self.pdf_decompressed[short_name] = decomp_file
+            # Use pluggable parser instead of direct pikepdf
+            try:
+                decomp_file = self.pdf_stream_parser.extract_content_streams(filename)
+                self.pdf_decompressed[short_name] = decomp_file
+                
+            except PdfParserError as e:
+                self.app.log.error(f"PDF parsing failed: {str(e)}")
+                self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Failed to open PDF"), str(e)))
+                self.parsing_promises.remove(short_name)
+                return
+            except Exception as e:
+                self.app.log.error(f"Unexpected PDF parsing error: {str(e)}")
+                self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Failed to open PDF"), str(e)))
+                self.parsing_promises.remove(short_name)
+                return
 
             if self.pdf_decompressed[short_name] == '':
                 self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Failed to open"), str(filename)))
