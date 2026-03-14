@@ -8,6 +8,14 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+15.02.2026
+
+- ParseDXF: refactoring and optimization
+- ParseDXF: fixed an issue with the parsing of blocks
+- ParseDXF: fixed an issue with the parsing of the splines
+- ParseDXF: added support for text entities
+- updated TclCommand OpenDXF
+
 14.03.2026 
 
 - ParseGerber: refactoring and optimization

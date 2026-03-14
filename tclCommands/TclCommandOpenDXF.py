@@ -29,7 +29,8 @@ class TclCommandOpenDXF(TclCommandSignaled):
     # dictionary of types from Tcl command, needs to be ordered , this  is  for options  like -optionname value
     option_types = collections.OrderedDict([
         ('type', str),
-        ('outname', str)
+        ('outname', str),
+        ('text_mode', str)  # NEW: Add text_mode option
     ])
 
     # array of mandatory options for current Tcl command: required = {'name','outname'}
@@ -42,9 +43,16 @@ class TclCommandOpenDXF(TclCommandSignaled):
             ('filename', 'Absolute path to file to open. Required.\n'
                          'WARNING: no spaces are allowed. If unsure enclose the entire path with quotes.'),
             ('type', 'Open as a Gerber or Geometry (default) object. Values can be: "geometry" or "gerber"'),
-            ('outname', 'Name of the resulting Geometry object.')
+            ('outname', 'Name of the resulting Geometry object.'),
+            ('text_mode', 'Text conversion mode: "stroke" (default, CNC paths), '
+                          '"outline" (filled shapes), or "none" (skip text)')
         ]),
-        'examples': ['open_dxf D:\\my_beautiful_svg_file.SVG']
+        'examples': [
+            'open_dxf /path/to/file.DXF',
+            'open_dxf /path/to/file.DXF -type gerber',
+            'open_dxf /path/to/file.DXF -text_mode outline',
+            'open_dxf /path/to/file.DXF -text_mode none  # Skip text, import geometry only'
+        ]
     }
 
     def execute(self, args, unnamed_args):
@@ -60,12 +68,10 @@ class TclCommandOpenDXF(TclCommandSignaled):
         # How the object should be initialized
         def obj_init(geo_obj, app_obj):
 
-            # if geo_obj.kind != 'geometry' and geo_obj.kind != 'gerber':
-            #     self.raise_tcl_error('Expected Geometry or Gerber, got %s %s.' % (outname, type(geo_obj)))
             if obj_type == "geometry":
-                geo_obj.import_dxf_as_geo(filename, units=units)
+                geo_obj.import_dxf_as_geo(filename, units=units, text_mode=text_mode)
             elif obj_type == "gerber":
-                geo_obj.import_dxf_as_gerber(filename, units=units)
+                geo_obj.import_dxf_as_gerber(filename, units=units, text_mode=text_mode)
             else:
                 return "fail"
 
@@ -85,6 +91,16 @@ class TclCommandOpenDXF(TclCommandSignaled):
             self.raise_tcl_error("Option type can be 'geometry' or 'gerber' only, got '%s'." % obj_type)
             return "fail"
 
+        # Get text_mode option with default 'stroke'
+        if 'text_mode' in args:
+            text_mode = str(args['text_mode']).lower()
+            # Validate text_mode value
+            if text_mode not in ('stroke', 'outline', 'none'):
+                self.raise_tcl_error("Option text_mode must be 'stroke', 'outline', or 'none', got '%s'." % text_mode)
+                return "fail"
+        else:
+            text_mode = 'stroke'
+
         units = self.app.app_units.upper()
 
         with self.app.proc_container.new('%s...' % _("Opening")):
@@ -94,8 +110,6 @@ class TclCommandOpenDXF(TclCommandSignaled):
             if ret_val == 'fail':
                 filename = self.app.options['global_tcl_path'] + '/' + outname
                 ret_val = self.app.app_obj.new_object(obj_type, outname, obj_init, plot=False)
-                # self.app.shell.append_output(
-                #     "No path provided or path is wrong. Using the default Path... \n")
 
                 if ret_val == 'fail':
                     self.app.log.error("Failed. The OpenDXF command was used but could not open the DXF file")

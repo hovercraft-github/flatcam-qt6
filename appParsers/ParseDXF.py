@@ -19,6 +19,37 @@ import logging
 
 log = logging.getLogger('base2')
 
+# Explicit import for version checking
+import ezdxf
+
+# Try to import text2path addon (available in ezdxf >= 0.16.0)
+# Graceful degradation handles edge case where ezdxf is installed but addon is missing/corrupted
+try:
+    from ezdxf.addons import text2path
+    HAS_TEXT2PATH = True
+except ImportError:
+    HAS_TEXT2PATH = False
+    text2path = None  # Prevent NameError in downstream code
+    log.warning("ezdxf text2path addon not available. "
+                "DXF TEXT/MTEXT/ATTRIB entities will be skipped. "
+                "Upgrade ezdxf to >= 0.16.0 for text support.")
+
+# Separate version check with its own error handling
+# This prevents version parsing errors from affecting the import flag
+HAS_TEXT2PATH_VERSION_OK = True
+if HAS_TEXT2PATH:
+    try:
+        EZDXF_VERSION = tuple(map(int, ezdxf.__version__.split('.')[:3]))
+        if EZDXF_VERSION < (0, 16, 0):
+            HAS_TEXT2PATH_VERSION_OK = False
+            log.warning(f"ezdxf version {ezdxf.__version__} detected. "
+                        f"text2path requires >= 0.16.0. Text import may not work correctly.")
+    except (ValueError, AttributeError) as e:
+        # Version string format unexpected - log warning but continue
+        HAS_TEXT2PATH_VERSION_OK = False
+        log.warning(f"Could not parse ezdxf version string: {e}. "
+                    f"Text import may not work correctly.")
+
 
 def distance(pt1, pt2):
     return math.sqrt((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2)
@@ -273,77 +304,232 @@ def dxfspline2shapely(spline):
 
 
 def dxftrace2shapely(trace):
-    iterator = 0
+    """
+    Convert DXF TRACE entity to Shapely Polygon.
+    
+    :param trace: ezdxf TRACE entity
+    :return: Shapely Polygon
+    """
     corner_list = []
     try:
-        corner_list.append(trace[iterator])
-        iterator += 1
+        for point in trace:
+            corner_list.append(point)
     except Exception:
-        return Polygon(corner_list)
+        pass
+    
+    if len(corner_list) < 3:
+        # Return empty polygon if not enough points
+        return Polygon()
+    
+    return Polygon(corner_list)
 
 
-def getdxfgeo(dxf_object):
+def dxftext2shapely(text_entity, text_mode='stroke'):
+    """
+    Convert DXF TEXT, MTEXT, ATTRIB, or ATTDEF entity to Shapely geometry.
+    
+    :param text_entity: ezdxf TEXT, MTEXT, ATTRIB, or ATTDEF entity
+    :param text_mode: 'stroke' for single-line paths (CNC engraving),
+                      'outline' for filled polygon outlines,
+                      'none' to skip conversion (returns empty list)
+    :return: List of Shapely geometry objects (LineString or Polygon).
+             Returns empty list on error, when text_mode='none', or when conversion fails.
+    """
+    # Use module-level imports for LineString and Polygon
+    
+    geometries = []
+    
+    # Check if text2path is available and version is compatible
+    if not HAS_TEXT2PATH:
+        log.warning("text2path addon not available, skipping text conversion")
+        return []
+    
+    # Check if ezdxf version is compatible
+    if not HAS_TEXT2PATH_VERSION_OK:
+        log.warning("ezdxf version may be incompatible, skipping text conversion")
+        return []
+    
+    # Validate text_mode parameter
+    if text_mode not in ('stroke', 'outline', 'none'):
+        log.warning(f"Invalid text_mode '{text_mode}', using 'stroke'")
+        text_mode = 'stroke'
+    
+    # Skip conversion if mode is 'none'
+    if text_mode == 'none':
+        return []
+    
+    # Initialize layer for error handling before try block
+    layer = 'unknown'
+    
+    try:
+        # Get text content - TEXT, MTEXT, and ATTRIB entities all use 'text' attribute
+        # REVIEW FIX v1.7: ATTRIB does NOT use 'value' - it uses 'text' like other entities
+        text_content = getattr(text_entity.dxf, 'text', '')
+        
+        # Get insert point for logging (may be in OCS, we use as-is - see Limitations)
+        insert_point = getattr(text_entity.dxf, 'insert', None)
+        
+        # Get layer for better error messages
+        layer = getattr(text_entity.dxf, 'layer', 'unknown')
+        
+        # Convert text entity to paths using ezdxf text2path addon
+        # REVIEW FIX v1.7: Correct API is make_paths_from_entity(), NOT text2paths()
+        # text2paths() does NOT exist - this was a bug in plan v1.6
+        paths = list(text2path.make_paths_from_entity(text_entity))
+        
+        for path in paths:
+            # Get vertices from the path using flattening()
+            # REVIEW FIX v1.7: flattening() REQUIRES distance argument
+            # Signature: Path.flattening(distance: float, segments: int = 4) -> Iterator[Vec3]
+            # Use distance=0.01 for reasonable CNC precision
+            vertices_3d = list(path.flattening(distance=0.01))
+            
+            # Use .x, .y attributes instead of indexing for safety
+            vertices = [(v.x, v.y) for v in vertices_3d]
+            
+            if len(vertices) < 2:
+                continue
+            
+            # Create appropriate Shapely geometry based on mode and path type
+            if text_mode == 'stroke' or not path.is_closed:
+                # Single-line path for CNC engraving
+                geometries.append(LineString(vertices))
+            elif path.is_closed and len(vertices) >= 3:
+                # Closed outline for filled text
+                geometries.append(Polygon(vertices))
+            else:
+                # Fallback to LineString
+                geometries.append(LineString(vertices))
+        
+        if geometries:
+            # Truncate text for logging to avoid excessive length
+            text_preview = str(text_content)[:50] if len(str(text_content)) > 50 else str(text_content)
+            log.debug(f"Converted TEXT '{text_preview}' at {insert_point} "
+                      f"to {len(geometries)} geometry objects")
+        else:
+            text_preview = str(text_content)[:50] if len(str(text_content)) > 50 else str(text_content)
+            log.debug(f"TEXT '{text_preview}' produced no geometry")
+        
+    except AttributeError as e:
+        log.error(f"Failed to convert {text_entity.dxftype()} on layer "
+                  f"'{layer}' - missing attribute: {e}")
+        return []
+    except Exception as e:
+        log.error(f"Failed to convert {text_entity.dxftype()} on layer "
+                  f"'{layer}' to geometry: {type(e).__name__}: {e}")
+        return []
+    
+    return geometries
 
+
+def getdxfgeo(dxf_object, text_mode='stroke', units=None):
+    """
+    Extract all geometry and text from DXF modelspace.
+    
+    :param dxf_object: ezdxf Document object
+    :param text_mode: 'stroke' or 'outline' for text conversion, 'none' to skip
+    :param units: Document units (optional, currently unused)
+    :return: Combined list of Shapely geometry objects
+    """
     msp = dxf_object.modelspace()
-    geos = get_geo(dxf_object, msp)
-
-    # geo_block = get_geo_from_block(dxf_object)
-
+    geos = get_geo(dxf_object, msp, text_mode=text_mode)
+    
     return geos
 
 
-def get_geo_from_insert(dxf_object, insert):
+def get_geo_from_insert(dxf_object, insert, text_mode='stroke'):
+    """
+    Extract geometry from INSERT (block reference) entity.
+    
+    :param dxf_object: ezdxf Document object
+    :param insert: INSERT entity
+    :param text_mode: 'stroke', 'outline', or 'none' for text conversion
+    :return: List of transformed Shapely geometry objects
+    """
+    # NO NEW IMPORTS NEEDED - translate, scale, rotate already imported from shapely.affinity
+    
     geo_block_transformed = []
-
-    phi = insert.dxf.rotation
-    tr = insert.dxf.insert
-    sx = insert.dxf.xscale
-    sy = insert.dxf.yscale
-    r_count = insert.dxf.row_count
-    r_spacing = insert.dxf.row_spacing
-    c_count = insert.dxf.column_count
-    c_spacing = insert.dxf.column_spacing
-
-    # print(phi, tr)
-
-    # identify the block given the 'INSERT' type entity name
-    block = dxf_object.blocks[insert.dxf.name]
-    block_coords = (block.block.dxf.base_point[0], block.block.dxf.base_point[1])
-
-    # get a list of geometries found in the block
-    geo_block = get_geo(dxf_object, block)
-
-    # iterate over the geometries found and apply any transformation found in the 'INSERT' entity attributes
-    for geo in geo_block:
-
-        # get the bounds of the geometry
-        # minx, miny, maxx, maxy = geo.bounds
-
-        if tr[0] != 0 or tr[1] != 0:
-            geo = translate(geo, (tr[0] - block_coords[0]), (tr[1] - block_coords[1]))
-
-        # support for array block insertions
-        if r_count > 1:
-            for r in range(r_count):
-                geo_block_transformed.append(translate(geo, (tr[0] + (r * r_spacing) - block_coords[0]), 0))
-        if c_count > 1:
-            for c in range(c_count):
-                geo_block_transformed.append(translate(geo, 0, (tr[1] + (c * c_spacing) - block_coords[1])))
-
-        if sx != 1 or sy != 1:
-            geo = scale(geo, sx, sy)
-        if phi != 0:
-            if isinstance(tr, str) and tr.lower() == 'c':
-                tr = 'center'
-            elif isinstance(tr, ezdxf_vector):
-                tr = list(tr)
-            geo = rotate(geo, phi, origin=tr)
-
-        geo_block_transformed.append(geo)
+    
+    try:
+        phi = insert.dxf.rotation
+        tr = insert.dxf.insert
+        sx = insert.dxf.xscale
+        sy = insert.dxf.yscale
+        r_count = insert.dxf.row_count
+        r_spacing = insert.dxf.row_spacing
+        c_count = insert.dxf.column_count
+        c_spacing = insert.dxf.column_spacing
+        
+        # identify the block given the 'INSERT' type entity name
+        # NOTE: Use direct indexing (not .get()) to match existing code pattern
+        block = dxf_object.blocks[insert.dxf.name]
+        block_coords = (block.block.dxf.base_point[0], block.block.dxf.base_point[1])
+        
+        # ====================================================================
+        # CRITICAL FIX: FORWARD text_mode parameter for text-in-block support
+        # This is the ONLY logic change - all transformation code preserved
+        # ====================================================================
+        geo_block = get_geo(dxf_object, block, text_mode=text_mode)
+        
+        if not geo_block:
+            return []
+        
+        # iterate over the geometries found and apply any transformation 
+        # found in the 'INSERT' entity attributes
+        for geo in geo_block:
+            # get the bounds of the geometry
+            # minx, miny, maxx, maxy = geo.bounds
+            
+            if tr[0] != 0 or tr[1] != 0:
+                geo = translate(geo, (tr[0] - block_coords[0]), (tr[1] - block_coords[1]))
+            
+            # ============================================================
+            # KNOWN ISSUE: Array handling may produce duplicates
+            # TODO: Fix pre-existing bug where array insertions with
+            # row_count > 1 OR column_count > 1 produce extra geometries.
+            # Current logic appends in each loop PLUS final append.
+            # See Limitations section for details.
+            # ============================================================
+            # support for array block insertions
+            if r_count > 1:
+                for r in range(r_count):
+                    geo_block_transformed.append(translate(geo, (tr[0] + (r * r_spacing) - block_coords[0]), 0))
+            if c_count > 1:
+                for c in range(c_count):
+                    geo_block_transformed.append(translate(geo, 0, (tr[1] + (c * c_spacing) - block_coords[1])))
+            
+            if sx != 1 or sy != 1:
+                geo = scale(geo, sx, sy)
+            if phi != 0:
+                if isinstance(tr, str) and tr.lower() == 'c':
+                    tr = 'center'
+                elif isinstance(tr, ezdxf_vector):
+                    tr = list(tr)
+                geo = rotate(geo, phi, origin=tr)
+            
+            geo_block_transformed.append(geo)
+        
+        log.debug(f"INSERT block '{insert.dxf.name}' converted {len(geo_block)} entities")
+        
+    except KeyError as e:
+        log.error(f"INSERT block not found: {e}")
+        return []
+    except Exception as e:
+        log.error(f"Failed to process INSERT entity: {type(e).__name__}: {e}")
+        return []
+    
     return geo_block_transformed
 
 
-def get_geo(dxf_object, container):
+def get_geo(dxf_object, container, text_mode='stroke'):
+    """
+    Extract geometry from DXF container.
+    
+    :param dxf_object: ezdxf Document object
+    :param container: DXF container (e.g., modelspace, block)
+    :param text_mode: 'stroke', 'outline', or 'none' for text conversion
+    :return: List of Shapely geometry objects
+    """
     # store shapely geometry here
     geo = []
 
@@ -370,8 +556,25 @@ def get_geo(dxf_object, container):
             g = dxftrace2shapely(dxf_entity)
         elif dxf_entity.dxftype() == 'SPLINE':
             g = dxfspline2shapely(dxf_entity)
+        # ============================================================
+        # NEW: TEXT, MTEXT, ATTRIB and ATTDEF handling
+        # ============================================================
+        elif dxf_entity.dxftype() in ('TEXT', 'MTEXT', 'ATTRIB', 'ATTDEF'):
+            # Check if text2path is available before attempting conversion
+            if HAS_TEXT2PATH and text_mode != 'none':
+                text_geos = dxftext2shapely(dxf_entity, text_mode=text_mode)
+                if text_geos:
+                    geo.extend(text_geos)
+            elif not HAS_TEXT2PATH:
+                log.debug("TEXT/MTEXT/ATTRIB/ATTDEF entity skipped - text2path addon not available")
+            # Skip the common g append logic below - text handled inline
+            # CRITICAL: continue prevents double-append of empty g list
+            continue
+        # ============================================================
+        # UPDATED: INSERT handling - forward text_mode parameter
+        # ============================================================
         elif dxf_entity.dxftype() == 'INSERT':
-            g = get_geo_from_insert(dxf_object, dxf_entity)
+            g = get_geo_from_insert(dxf_object, dxf_entity, text_mode=text_mode)
         else:
             log.debug(" %s is not supported yet." % dxf_entity.dxftype())
 

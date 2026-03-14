@@ -1956,7 +1956,7 @@ class appIO(QtCore.QObject):
             # Register recent file
             self.app.file_opened.emit("svg", filename)
 
-    def import_dxf(self, filename, geo_type='geometry', outname=None, plot=True):
+    def import_dxf(self, filename, geo_type='geometry', outname=None, plot=True, text_mode='stroke'):
         """
         Adds a new Geometry Object to the projects and populates
         it with shapes extracted from the DXF file.
@@ -1965,6 +1965,9 @@ class appIO(QtCore.QObject):
         :param geo_type:    Type of FlatCAM object that will be created from DXF
         :param outname:     Name for the imported Geometry
         :param plot:        If True then the resulting object will be plotted on canvas
+        :param text_mode:   'stroke' for CNC engraving paths, 
+                            'outline' for filled shapes,
+                            'none' to skip text import
         :return:
         """
         self.log.debug(" ********* Importing DXF as: %s ********* " % geo_type.capitalize())
@@ -1986,9 +1989,9 @@ class appIO(QtCore.QObject):
 
         def obj_init(geo_obj, app_obj):
             if obj_type == "geometry":
-                geo_obj.import_dxf_as_geo(filename, units=units)
+                geo_obj.import_dxf_as_geo(filename, units=units, text_mode=text_mode)
             elif obj_type == "gerber":
-                geo_obj.import_dxf_as_gerber(filename, units=units)
+                geo_obj.import_dxf_as_gerber(filename, units=units, text_mode=text_mode)
             else:
                 return "fail"
 

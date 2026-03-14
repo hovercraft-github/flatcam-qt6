@@ -1308,13 +1308,14 @@ class Geometry(object):
 
         self.tools[1]['data']['name'] = self.obj_options['name']
 
-    def import_dxf_as_geo(self, filename, units='MM'):
+    def import_dxf_as_geo(self, filename, units='MM', text_mode='stroke'):
         """
         Imports shapes from an DXF file into the object's geometry.
 
         :param filename:    Path to the DXF file.
         :type filename:     str
         :param units:       Application units
+        :param text_mode:   'stroke' for CNC paths, 'outline' for filled shapes, 'none' to skip
         :return: None
         """
         self.app.log.debug("Parsing DXF file geometry into a Geometry object solid geometry.")
@@ -1324,7 +1325,7 @@ class Geometry(object):
 
         # Parse into list of shapely objects
         dxf = ezdxf.readfile(filename)
-        geos = getdxfgeo(dxf)
+        geos = getdxfgeo(dxf, text_mode=text_mode)
 
         # trying to optimize the resulting geometry by merging contiguous lines
         geos = list(self.flatten_list(geos))
@@ -1376,12 +1377,6 @@ class Geometry(object):
         })
 
         self.tools[1]['data']['name'] = self.obj_options['name']
-
-        # commented until this function is ready
-        # geos_text = getdxftext(dxf, object_type, units=units)
-        # if geos_text is not None:
-        #     geos_text_f = []
-        #     self.solid_geometry = [self.solid_geometry, geos_text_f]
 
     def size(self):
         """

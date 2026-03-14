@@ -381,6 +381,16 @@ class Vector(list):
         elif isinstance(x, (list, tuple)):
             for i in x:
                 self.append(float(i))
+        elif hasattr(x, '__iter__') and not isinstance(x, (str, bytes)):
+            # Handle numpy arrays and other array-like iterables
+            try:
+                for i in x:
+                    self.append(float(i))
+            except (TypeError, ValueError):
+                # Fallback if iteration fails
+                self.append(float(x))
+                for i in args:
+                    self.append(float(i))
         else:
             self.append(float(x))
             for i in args:

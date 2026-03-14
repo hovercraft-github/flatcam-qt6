@@ -2129,13 +2129,14 @@ class Gerber(Geometry):
             new_el = {'solid': pol, 'follow': LineString(pol.exterior.coords)}
             self.tools[0]['geometry'].append(new_el)
 
-    def import_dxf_as_gerber(self, filename, units='MM'):
+    def import_dxf_as_gerber(self, filename, units='MM', text_mode='stroke'):
         """
-        Imports shapes from an DXF file into the Gerber object geometry.
+        Imports shapes from a DXF file into the Gerber object geometry.
 
         :param filename:    Path to the DXF file.
         :type filename:     str
         :param units:       Application units
+        :param text_mode:   'stroke' for CNC paths, 'outline' for filled shapes, 'none' to skip
         :return: None
         """
 
@@ -2145,7 +2146,7 @@ class Gerber(Geometry):
 
         # Parse into list of shapely objects
         dxf = ezdxf.readfile(filename)
-        geos = getdxfgeo(dxf)
+        geos = getdxfgeo(dxf, text_mode=text_mode)
 
         # trying to optimize the resulting geometry by merging contiguous lines
         geos = list(self.flatten_list(geos))
