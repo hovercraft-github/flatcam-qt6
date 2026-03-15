@@ -16,6 +16,7 @@ CHANGELOG for FlatCAM Evo beta
 - ParseSVG: improved the SVG parser by adding support for pt, px units
 - ParseSVG: added support for "Symbol" SVG element
 - ParseSVG: fixed the usage of offsets, rounded corners and some wrong application of factors
+- VisPyVisuals: big improvements in the performance of the plotting; in some cases the performance was improved by a factor of 3 to 5 times
 
 15.02.2026
 

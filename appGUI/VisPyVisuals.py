@@ -13,6 +13,7 @@ from vispy.color import Color
 from shapely import Polygon, LineString, LinearRing
 import threading
 import numpy as np
+from itertools import chain
 from appGUI.VisPyTesselators import GLUTess
 
 
@@ -78,15 +79,15 @@ def _update_shape_buffers(data, triangulation='glu'):
             mesh_tris += tri_tris
             mesh_vertices += tri_pts
             face_color_rgba = Color(face_color).rgba
-            # mesh_colors += [face_color_rgba] * (len(tri_tris) // 3)
-            mesh_colors += [face_color_rgba for __ in range(len(tri_tris) // 3)]
+            # Use list multiplication (faster than list comprehension for uniform values)
+            mesh_colors += [face_color_rgba] * (len(tri_tris) // 3)
 
         # Appending data for line
         if len(pts) > 0:
             line_pts += pts
             colo_rgba = Color(color).rgba
-            # line_colors += [colo_rgba] * len(pts)
-            line_colors += [colo_rgba for __ in range(len(pts))]
+            # Use list multiplication (faster than list comprehension for uniform values)
+            line_colors += [colo_rgba] * len(pts)
 
     # Store buffers
     data['line_pts'] = line_pts
@@ -110,10 +111,19 @@ def _linearring_to_segments(arr):
     :return: numpy.array
         Line segments
     """
+    # Optimized: avoid input mutation and use zip for pair generation
+    # Check if ring needs closing (first != last)
     if arr[0] != arr[-1]:
-        arr.append(arr[0])
-
-    return _linestring_to_segments(arr)
+        # Ring is open - use zip with first element appended for closing segment
+        # zip(arr[:-1], arr[1:]) gives pairs for all consecutive elements
+        # Then add the closing pair (last, first)
+        segments = [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
+        segments.append(arr[-1])
+        segments.append(arr[0])
+        return segments
+    else:
+        # Ring is already closed - just get consecutive pairs
+        return [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
 
 
 def _linestring_to_segments(arr):
@@ -124,7 +134,10 @@ def _linestring_to_segments(arr):
     :return: numpy.array
         Line segments
     """
-    return [arr[i // 2] for i in range(0, len(arr) * 2)][1:-1]
+    # Optimized: direct pair generation using zip - avoids creating oversized intermediate list
+    # zip(arr[:-1], arr[1:]) creates pairs of consecutive vertices
+    # flatten with list comprehension
+    return [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
 
 
 class ShapeGroup(object):
@@ -248,6 +261,9 @@ class ShapeCollectionVisual(CompoundVisual):
 
         self.data = {}
         self.last_key = -1
+        
+        # Dirty flag to track whether buffers need rebuilding
+        self._dirty = True
 
         # Thread locks
         self.key_lock = threading.Lock()
@@ -340,6 +356,9 @@ class ShapeCollectionVisual(CompoundVisual):
             except Exception:
                 self.data[key] = _update_shape_buffers(self.data[key])
 
+        # Mark buffers as dirty
+        self._dirty = True
+
         if update:
             self.redraw()   # redraw() waits for pool process end
 
@@ -363,6 +382,9 @@ class ShapeCollectionVisual(CompoundVisual):
         if key in self.data:
             del self.data[key]
 
+        # Mark buffers as dirty
+        self._dirty = True
+
         if update:
             self.__update()
 
@@ -374,6 +396,10 @@ class ShapeCollectionVisual(CompoundVisual):
         """
         self.last_key = -1
         self.data.clear()
+        
+        # Mark buffers as dirty
+        self._dirty = True
+        
         if update:
             self.__update()
 
@@ -389,6 +415,9 @@ class ShapeCollectionVisual(CompoundVisual):
                     self.data[k]['visible'] = state
 
         self.update_lock.release()
+        
+        # Mark buffers as dirty
+        self._dirty = True
 
     def update_color(self, new_mesh_color=None, new_line_color=None, indexes=None):
         if new_mesh_color is None and new_line_color is None:
@@ -396,6 +425,11 @@ class ShapeCollectionVisual(CompoundVisual):
 
         if not self.data:
             return
+
+        # Mark buffers as dirty (color changes require visual update)
+        self._dirty = True
+        
+        # Rest of the method...
 
         # if a new color is empty string then make it None so it will not be updated
         # if a new color is valid then transform it here in a format palatable
@@ -429,8 +463,9 @@ class ShapeCollectionVisual(CompoundVisual):
                             try:
                                 mesh_colors[data['layer']] += [mesh_color_rgba] * dim_mesh_tris
                                 self.data[k]['face_color'] = new_mesh_color
-
-                                data['mesh_colors'] = [mesh_color_rgba for __ in range(len(data['mesh_colors']))]
+                                # Invalidate cached rgba
+                                data['face_color_rgba'] = mesh_color_rgba
+                                data['mesh_colors'] = [mesh_color_rgba] * len(data['mesh_colors'])
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create mesh colors --> Data error. %s" % str(e))
@@ -442,8 +477,9 @@ class ShapeCollectionVisual(CompoundVisual):
                                 line_pts[data['layer']] += data['line_pts']
                                 line_colors[data['layer']] += [line_color_rgba] * dim_line_pts
                                 self.data[k]['color'] = new_line_color
-
-                                data['line_colors'] = [mesh_color_rgba for __ in range(len(data['line_colors']))]
+                                # Invalidate cached rgba
+                                data['color_rgba'] = line_color_rgba
+                                data['line_colors'] = [line_color_rgba] * len(data['line_colors'])
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create line colors --> Data error. %s" % str(e))
@@ -459,8 +495,9 @@ class ShapeCollectionVisual(CompoundVisual):
                                 try:
                                     mesh_colors[data['layer']] += [mesh_color_rgba] * dim_mesh_tris
                                     self.data[k]['face_color'] = new_mesh_color
-
-                                    data['mesh_colors'] = [mesh_color_rgba for __ in range(len(data['mesh_colors']))]
+                                    # Invalidate cached rgba
+                                    data['face_color_rgba'] = mesh_color_rgba
+                                    data['mesh_colors'] = [mesh_color_rgba] * len(data['mesh_colors'])
                                 except Exception as e:
                                     print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                           "Create mesh colors --> Data error. %s" % str(e))
@@ -470,15 +507,19 @@ class ShapeCollectionVisual(CompoundVisual):
                                     line_pts[data['layer']] += data['line_pts']
                                     line_colors[data['layer']] += [line_color_rgba] * dim_line_pts
                                     self.data[k]['color'] = new_line_color
-
-                                    data['line_colors'] = [mesh_color_rgba for __ in range(len(data['line_colors']))]
+                                    # Invalidate cached rgba
+                                    data['color_rgba'] = line_color_rgba
+                                    data['line_colors'] = [line_color_rgba] * len(data['line_colors'])
                                 except Exception as e:
                                     print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                           "Create line colors --> Data error. %s" % str(e))
                     else:
                         if dim_mesh_tris != 0:
                             try:
-                                mesh_colors[data['layer']] += [Color(data['face_color']).rgba] * dim_mesh_tris
+                                # Use cached rgba value if available
+                                if 'face_color_rgba' not in data:
+                                    data['face_color_rgba'] = Color(data['face_color']).rgba
+                                mesh_colors[data['layer']] += [data['face_color_rgba']] * dim_mesh_tris
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create mesh colors --> Data error. %s" % str(e))
@@ -486,7 +527,10 @@ class ShapeCollectionVisual(CompoundVisual):
                         if dim_line_pts != 0:
                             try:
                                 line_pts[data['layer']] += data['line_pts']
-                                line_colors[data['layer']] += [Color(data['color']).rgba] * dim_line_pts
+                                # Use cached rgba value if available
+                                if 'color_rgba' not in data:
+                                    data['color_rgba'] = Color(data['color']).rgba
+                                line_colors[data['layer']] += [data['color_rgba']] * dim_line_pts
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create line colors --> Data error. %s" % str(e))
@@ -524,27 +568,48 @@ class ShapeCollectionVisual(CompoundVisual):
         """
         Merges internal buffers, sets data to visuals, redraws collection on scene
         """
-        mesh_vertices = [[] for _ in range(0, len(self._meshes))]       # Vertices for mesh
-        mesh_tris = [[] for _ in range(0, len(self._meshes))]           # Faces for mesh
-        mesh_colors = [[] for _ in range(0, len(self._meshes))]         # Face colors
-        line_pts = [[] for _ in range(0, len(self._lines))]             # Vertices for line
-        line_colors = [[] for _ in range(0, len(self._lines))]          # Line color
+        # Skip if nothing has changed
+        if not self._dirty:
+            return
+        
+        # Optimized: Phase 1 - Collect references (O(1) per shape)
+        layer_line_pts_chunks = [[] for _ in range(len(self._lines))]
+        layer_mesh_verts_chunks = [[] for _ in range(len(self._meshes))]
+        layer_mesh_tris_chunks = [[] for _ in range(len(self._meshes))]
+        layer_mesh_colors_chunks = [[] for _ in range(len(self._meshes))]
+        layer_line_colors_chunks = [[] for _ in range(len(self._lines))]
+        
+        # Track cumulative vertex counts per layer for mesh_tris offsets
+        # mesh_tris contains triangle indices into mesh_vertices.
+        # When merging multiple shapes, indices must be offset by the
+        # cumulative vertex count of all previously merged shapes.
+        layer_vert_counts = [0] * len(self._meshes)
 
         # Lock sub-visuals updates
         self.update_lock.acquire(True)
 
-        # Merge shapes buffers
+        # Collect shape buffers
         for data in list(self.data.values()):
             if data['visible'] and 'line_pts' in data:
-                try:
-                    line_pts[data['layer']] += data['line_pts']
-                    line_colors[data['layer']] += data['line_colors']
+                layer = data['layer']
+                layer_line_pts_chunks[layer].append(data['line_pts'])
+                layer_line_colors_chunks[layer].append(data['line_colors'])
 
-                    mesh_tris[data['layer']] += [x + len(mesh_vertices[data['layer']]) for x in data['mesh_tris']]
-                    mesh_vertices[data['layer']] += data['mesh_vertices']
-                    mesh_colors[data['layer']] += data['mesh_colors']
-                except Exception as e:
-                    print("VisPyVisuals.ShapeCollectionVisual._update() --> Data error. %s" % str(e))
+                if data['mesh_tris'] and data['mesh_vertices']:
+                    offset = layer_vert_counts[layer]
+                    layer_mesh_tris_chunks[layer].append(
+                        [x + offset for x in data['mesh_tris']]
+                    )
+                    layer_mesh_verts_chunks[layer].append(data['mesh_vertices'])
+                    layer_mesh_colors_chunks[layer].append(data['mesh_colors'])
+                    layer_vert_counts[layer] += len(data['mesh_vertices'])
+
+        # Phase 2: Single flatten per layer using itertools.chain (imported at module level)
+        line_pts = [list(chain.from_iterable(layer_line_pts_chunks[i])) for i in range(len(self._lines))]
+        line_colors = [list(chain.from_iterable(layer_line_colors_chunks[i])) for i in range(len(self._lines))]
+        mesh_vertices = [list(chain.from_iterable(layer_mesh_verts_chunks[i])) for i in range(len(self._meshes))]
+        mesh_tris = [list(chain.from_iterable(layer_mesh_tris_chunks[i])) for i in range(len(self._meshes))]
+        mesh_colors = [list(chain.from_iterable(layer_mesh_colors_chunks[i])) for i in range(len(self._meshes))]
 
         # Updating meshes
         for i, mesh in enumerate(self._meshes):
@@ -577,6 +642,12 @@ class ShapeCollectionVisual(CompoundVisual):
             line._bounds_changed()
 
         self._bounds_changed()
+        
+        # Reset dirty flag AFTER acquiring lock and completing update
+        # This prevents race conditions where another thread sets dirty
+        # between the initial check and the actual update
+        self._dirty = False
+        
         self.update_lock.release()
 
     def redraw(self, indexes=None, update_colors=None):
@@ -589,6 +660,7 @@ class ShapeCollectionVisual(CompoundVisual):
         # Only one thread can update data
         self.results_lock.acquire(True)
 
+        results_collected = False
         for i in list(self.data.keys()) if not indexes else indexes:
             if i in list(self.results.keys()):
                 try:
@@ -596,11 +668,16 @@ class ShapeCollectionVisual(CompoundVisual):
                     if i in self.data:
                         self.data[i] = self.results[i].get()[0]             # Store translated data
                         del self.results[i]
+                        results_collected = True
                 except Exception as e:
                     print("VisPyVisuals.ShapeCollectionVisual.redraw() --> Data error = %s. Indexes = %s" %
                           (str(e), str(indexes)))
 
         self.results_lock.release()
+
+        # Mark dirty if pool results were collected (data changed)
+        if results_collected:
+            self._dirty = True
 
         if update_colors is None or update_colors is False:
             self.__update()
