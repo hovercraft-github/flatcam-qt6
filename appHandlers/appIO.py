@@ -758,9 +758,22 @@ class appIO(QtCore.QObject):
         if len(filenames) == 0:
             self.inform.emit('[WARNING_NOTCL] %s' % _("Cancelled."))
         else:
-            for filename in filenames:
-                if filename != '':
-                    self.worker_task.emit({'fcn': self.import_dxf, 'params': [filename, type_of_obj]})
+            if len(filenames) > 1:
+                # Batch import: suppress individual plotting, then plot all at end
+                # This eliminates N canvas redraws and N zoom-fits, replacing them with 1 each
+                for filename in filenames:
+                    if filename != '':
+                        self.worker_task.emit({'fcn': self.import_dxf,
+                                               'params': [filename, type_of_obj, None, False]})  # plot=False
+                # After all imports complete, do a single plot_all with zoom fit
+                # 'low' priority = barrier: guaranteed to run after ALL imports finish
+                self.worker_task.emit({'fcn': self.app.plot_all, 'params': [True, False, True],
+                                       'priority': 'low'})  # fit_view=True
+            else:
+                # Single file: use normal behavior (plot=True is default)
+                for filename in filenames:
+                    if filename != '':
+                        self.worker_task.emit({'fcn': self.import_dxf, 'params': [filename, type_of_obj]})
 
     def on_file_new_click(self):
         """

@@ -5913,13 +5913,17 @@ class FlatCAMActivityView(QtWidgets.QWidget):
         self.icon.clicked.connect(replot_callback)
 
     def set_idle(self):
-        self.movie.stop()
+        # Only stop if movie is actually running
+        if self.movie.state() != QtGui.QMovie.MovieState.NotRunning:
+            self.movie.stop()
         self.text.setText(_("Idle."))
 
     def set_busy(self, msg, no_movie=None):
         if no_movie is not True:
-            self.icon.setMovie(self.movie)
-            self.movie.start()
+            # Only start/restart if movie is not already running
+            if self.movie.state() != QtGui.QMovie.MovieState.Running:
+                self.icon.setMovie(self.movie)
+                self.movie.start()
         self.text.setText(msg)
 
 

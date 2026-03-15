@@ -18,6 +18,7 @@ from shapely.geometry.base import BaseMultipartGeometry
 
 from lxml import etree as ET
 import ezdxf
+from ezdxf import recover
 import logging
 import re
 import sys
@@ -2145,7 +2146,11 @@ class Gerber(Geometry):
         self.multigeo = True
 
         # Parse into list of shapely objects
-        dxf = ezdxf.readfile(filename)
+        try:
+            dxf = ezdxf.readfile(filename)
+        except (KeyError, Exception) as e:
+            self.app.log.warning("Standard DXF read failed (%s), trying recovery mode..." % str(e))
+            dxf, auditor = recover.readfile(filename)
         geos = getdxfgeo(dxf, text_mode=text_mode)
 
         # trying to optimize the resulting geometry by merging contiguous lines

@@ -7215,6 +7215,15 @@ class App(QtCore.QObject):
                     active_obj.build_ui()
                 except Exception:
                     self.setup_default_properties_tab()
+                    return
+
+                # Safety net: verify widget was actually placed
+                if self.ui.properties_scroll_area.widget() is not active_obj.ui:
+                    try:
+                        active_obj.set_ui(active_obj.ui_type(app=self))
+                        active_obj.build_ui()
+                    except Exception:
+                        self.setup_default_properties_tab()
             else:
                 self.setup_default_properties_tab()
 

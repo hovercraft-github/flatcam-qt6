@@ -39,6 +39,7 @@ class FCProcess(object):
         }
         self.descr = descr
         self.status = "Active"
+        self._done_called = False  # Guard against double callback
 
     def __del__(self):
         self.done()
@@ -56,8 +57,11 @@ class FCProcess(object):
         self.done()
 
     def done(self):
-        for fcn in self.callbacks["done"]:
-            fcn(self)
+        # Guard against double callback from __exit__ and __del__
+        if not self._done_called:
+            self._done_called = True
+            for fcn in self.callbacks["done"]:
+                fcn(self)
 
     def connect(self, callback, event="done"):
         if callback not in self.callbacks[event]:
@@ -90,10 +94,14 @@ class FCProcessContainer(object):
 
         self.procs = []
         self.app = app
+        self._mutex = QtCore.QMutex()
 
     def add(self, proc):
-
-        self.procs.append(weakref.ref(proc))
+        self._mutex.lock()
+        try:
+            self.procs.append(weakref.ref(proc))
+        finally:
+            self._mutex.unlock()
 
     def new(self, descr):
         proc = FCProcess(descr, app=self.app)
@@ -113,21 +121,39 @@ class FCProcessContainer(object):
         self.remove(proc)
 
     def remove(self, proc):
+        # Optimized O(n) removal using list comprehension
+        self._mutex.lock()
+        try:
+            self.procs = [pref for pref in self.procs
+                          if pref() is not None and pref() != proc]
+        finally:
+            self._mutex.unlock()
 
-        to_be_removed = []
+    def get_procs_count(self):
+        """Thread-safe way to get the count of processes."""
+        self._mutex.lock()
+        try:
+            return len(self.procs)
+        finally:
+            self._mutex.unlock()
 
-        for pref in self.procs:
-            if pref() == proc or pref() is None:
-                to_be_removed.append(pref)
-
-        for pref in to_be_removed:
-            self.procs.remove(pref)
+    def get_first_proc(self):
+        """Thread-safe way to get the first process (if any)."""
+        self._mutex.lock()
+        try:
+            if self.procs:
+                return self.procs[0]()
+            return None
+        finally:
+            self._mutex.unlock()
 
 
 class FCVisibleProcessContainer(FCProcessContainer, QtCore.QObject):
     something_changed = QtCore.pyqtSignal()
     # this will signal that the application is IDLE
     idle_flag = QtCore.pyqtSignal()
+    # Private signal for thread-safe update request (marshals worker -> main thread)
+    _update_requested = QtCore.pyqtSignal()
 
     def __init__(self, view, app):
         assert isinstance(view, FlatCAMActivityView), \
@@ -141,38 +167,62 @@ class FCVisibleProcessContainer(FCProcessContainer, QtCore.QObject):
         self.text_to_display_in_activity = ''
         self.new_text = ' '
 
+        # Coalescing timer for UI updates - lives on main thread only
+        self._update_timer = QtCore.QTimer(self)
+        self._update_timer.setSingleShot(True)
+        self._update_timer.timeout.connect(self._do_coalesced_update)
+        self._update_timer.setInterval(50)  # 50ms coalescing window
+
+        # Signal->slot: marshals from worker thread to main thread via AutoConnection
+        self._update_requested.connect(self._handle_update_request)
         self.something_changed.connect(self.update_view)
+
+    def _handle_update_request(self):
+        """Slot runs on main thread (via AutoConnection). Safe to touch QTimer."""
+        if not self._update_timer.isActive():
+            self._update_timer.start()
+
+    def _do_coalesced_update(self):
+        """Timer callback on main thread - emits the coalesced signal."""
+        self.something_changed.emit()
 
     def on_done(self, proc):
         # self.app.log.debug("FCVisibleProcessContainer.on_done()")
         super(FCVisibleProcessContainer, self).on_done(proc)
 
-        self.something_changed.emit()
+        self._update_requested.emit()
 
     def on_change(self, proc):
         # self.app.log.debug("FCVisibleProcessContainer.on_change()")
         super(FCVisibleProcessContainer, self).on_change(proc)
 
         # whenever there is a change update the message on activity
-        self.text_to_display_in_activity = self.procs[0]().status_msg()
+        # Use thread-safe method to get first proc
+        first_proc = self.get_first_proc()
+        if first_proc:
+            self.text_to_display_in_activity = first_proc.status_msg()
 
-        self.something_changed.emit()
+        self._update_requested.emit()
 
     def update_view(self):
-        if len(self.procs) == 0:
+        # Use thread-safe method to get procs count
+        procs_count = self.get_procs_count()
+
+        if procs_count == 0:
             self.new_text = ''
             self.view.set_idle()
             self.idle_flag.emit()
 
-        elif len(self.procs) == 1:
+        elif procs_count == 1:
             self.view.set_busy(self.text_to_display_in_activity + self.new_text)
         else:
-            self.view.set_busy("%d %s" % (len(self.procs), _("processes running.")))
+            self.view.set_busy("%d %s" % (procs_count, _("processes running.")))
 
     def update_view_text(self, new_text, clear=False):
         # this has to be called after the method 'new' inherited by this class is called with a string text as param
         self.new_text = new_text
-        if len(self.procs) == 1:
+        # Use thread-safe method to get procs count
+        if self.get_procs_count() == 1:
             if clear is False:
                 self.view.set_busy(self.text_to_display_in_activity + self.new_text, no_movie=True)
             else:

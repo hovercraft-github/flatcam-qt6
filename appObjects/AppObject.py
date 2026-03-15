@@ -347,8 +347,14 @@ class AppObject(QtCore.QObject):
             # select the just opened object but deselect the previous ones
             self.app.collection.set_all_inactive()
             self.app.collection.set_active(obj.obj_options["name"])
-        else:
+        elif plot is True:
+            # Single-file import (not batch): deselect all, no new selection
             self.app.collection.set_all_inactive()
+        else:
+            # else: batch mode (plot=False, auto_select=False) — skip deselection entirely.
+            # During batch import, repeatedly deselecting all objects is O(n²) and causes UI freeze.
+            # The final plot_all (dispatched with priority='low') will handle the UI state.
+            pass
 
         # here it is done the object plotting
         def plotting_task(t_obj):

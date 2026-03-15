@@ -8,6 +8,11 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+16.03.2026
+
+- remade the workers system; now when assigning a worker we can set the priority of the worker: LOW, NORMAL (default), HIGH
+- improved the DXF parsing performance and fixed some bugs
+
 15.02.2026
 
 - ParseDXF: refactoring and optimization

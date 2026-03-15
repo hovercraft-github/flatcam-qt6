@@ -80,7 +80,11 @@ def dxfcircle2shapely(circle, n_points=100):
 
     ocs = circle.ocs()
     # if the extrusion attribute is not (0, 0, 1) then we have to change the coordinate system from OCS to WCS
-    if circle.dxf.extrusion != (0, 0, 1):
+    # Use tolerance-based comparison to handle floating-point precision issues in DXF files
+    ext = circle.dxf.extrusion
+    if not (math.isclose(ext[0], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[1], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[2], 1.0, abs_tol=1e-9)):
         center_pt = ocs.to_wcs(circle.dxf.center)
     else:
         center_pt = circle.dxf.center
@@ -137,7 +141,11 @@ def dxfarc2shapely(arc, n_points=100):
 
     ocs = arc.ocs()
     # if the extrusion attribute is not (0, 0, 1) then we have to change the coordinate system from OCS to WCS
-    if arc.dxf.extrusion != (0, 0, 1):
+    # Use tolerance-based comparison to handle floating-point precision issues in DXF files
+    ext = arc.dxf.extrusion
+    if not (math.isclose(ext[0], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[1], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[2], 1.0, abs_tol=1e-9)):
         arc_center = ocs.to_wcs(arc.dxf.center)
         start_angle = arc.dxf.start_angle + 180
         end_angle = arc.dxf.end_angle + 180
@@ -194,10 +202,15 @@ def dxfellipse2shapely(ellipse, ellipse_segments=100):
 
     ocs = ellipse.ocs()
     # if the extrusion attribute is not (0, 0, 1) then we have to change the coordinate system from OCS to WCS
-    if ellipse.dxf.extrusion != (0, 0, 1):
+    # Use tolerance-based comparison to handle floating-point precision issues in DXF files
+    ext = ellipse.dxf.extrusion
+    if not (math.isclose(ext[0], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[1], 0.0, abs_tol=1e-9) and
+            math.isclose(ext[2], 1.0, abs_tol=1e-9)):
         center = ocs.to_wcs(ellipse.dxf.center)
-        start_angle = ocs.to_wcs(ellipse.dxf.start_param)
-        end_angle = ocs.to_wcs(ellipse.dxf.end_param)
+        # start_param and end_param are scalar angle values (radians), not coordinates - do not convert them
+        start_angle = ellipse.dxf.start_param
+        end_angle = ellipse.dxf.end_param
         direction = 'CW'
     else:
         center = ellipse.dxf.center

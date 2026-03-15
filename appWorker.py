@@ -19,6 +19,8 @@ class Worker(QtCore.QObject):
     # avoid multiple tests  for debug availability
     pydevd_failed = False
     task_completed = QtCore.pyqtSignal(str)
+    # Per-worker signal for direct dispatch (eliminates broadcast fan-out)
+    worker_task_signal = QtCore.pyqtSignal(dict)
 
     def __init__(self, app, name=None):
         super(Worker, self).__init__()
@@ -45,8 +47,8 @@ class Worker(QtCore.QObject):
 
         self.allow_debug()
 
-        # Tasks are queued in the event listener.
-        self.app.worker_task.connect(self.do_worker_task)
+        # Connect to own per-worker signal (no broadcast, no worker_name check needed)
+        self.worker_task_signal.connect(self.do_worker_task)
 
     def do_worker_task(self, task):
 
@@ -54,16 +56,14 @@ class Worker(QtCore.QObject):
 
         self.allow_debug()
 
-        if ('worker_name' in task and task['worker_name'] == self.name) or \
-                ('worker_name' not in task and self.name is None):
-
-            try:
-                task['fcn'](*task['params'])
-            except Exception as e:
-                self.app.thread_exception.emit(e)
-                print(traceback.format_exc())
-                # raise e
-            finally:
-                self.task_completed.emit(self.name)
+        # No need to check worker_name - only receives own tasks via direct dispatch
+        try:
+            task['fcn'](*task['params'])
+        except Exception as e:
+            self.app.thread_exception.emit(e)
+            print(traceback.format_exc())
+            # raise e
+        finally:
+            self.task_completed.emit(self.name)
 
         # self.app.log.debug("Task ignored.")

@@ -170,7 +170,8 @@ class GeometryObject(FlatCAMObj, Geometry):
         try:
             self.ui_disconnect()
         except RuntimeError:
-            return
+            # Widget C++ object was deleted; recreate UI
+            self.set_ui(self.ui_type(app=self.app))
 
         FlatCAMObj.build_ui(self)
 
