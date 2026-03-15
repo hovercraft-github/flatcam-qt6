@@ -1212,9 +1212,19 @@ class Geometry(object):
         # h = float(svg_root.get('height'))
         # w = float(svg_root.get('width'))
         svg_parsed_dims = svgparselength(svg_root.get('height'))
-        h = svg_parsed_dims[0]  # TODO: No units support yet
+        h = svg_parsed_dims[0]
         svg_units = svg_parsed_dims[1]
-        if svg_units in ['em', 'ex', 'pt', 'px']:
+
+        # SVG unit to mm conversion factors
+        svg_unit_to_mm = {
+            'mm': 1.0,
+            'cm': 10.0,
+            'in': 25.4,
+            'px': 25.4 / 96.0,     # 1px = 1/96 inch
+            'pt': 25.4 / 72.0,     # 1pt = 1/72 inch
+        }
+
+        if svg_units in ['em', 'ex', '%']:
             self.app.log.error("camlib.Geometry.import_svg(). SVG units not supported: %s" % svg_units)
             self.app.inform.emit("[ERROR_NOTCL] %s" % _("Failed."))
             return
@@ -1223,8 +1233,11 @@ class Geometry(object):
         res = self.app.options['geometry_circle_steps']
         factor = svgparse_viewbox(svg_root)
 
-        if svg_units == 'cm':
-            factor *= 10
+        # Apply unit conversion
+        if svg_units in svg_unit_to_mm:
+            unit_factor = svg_unit_to_mm[svg_units]
+            factor *= unit_factor
+            h *= unit_factor
 
         geos = getsvggeo(svg_root, object_type, units=units, res=res, factor=factor, app=self.app)
         if geos is None:

@@ -19,21 +19,23 @@
 #  Reference: www.w3.org/TR/SVG/Overview.html              #
 # ##########################################################
 
-# import xml.etree.ElementTree as ET
 from svg.path import Line, Arc, CubicBezier, QuadraticBezier, parse_path
-# from svg.path.path import Move
-# from svg.path.path import Close
 import svg.path
-from shapely import LineString, MultiLineString, Point
-from shapely.affinity import skew, affine_transform, rotate
-import numpy as np
 
-from appParsers.ParseFont import *
+from shapely import LineString, MultiLineString, Point, Polygon
+from shapely.affinity import skew, affine_transform, rotate, scale, translate
+
+import numpy as np
+import logging
+import re
+from typing import List
+
+from appParsers.ParseFont import ParseFont
 
 log = logging.getLogger('base2')
 
 
-def svgparselength(lengthstr):
+def svgparselength(lengthstr: str) -> tuple[float, str | float | None]:
     """
     Parse an SVG length string into a float and a units
     string, if any.
@@ -55,7 +57,7 @@ def svgparselength(lengthstr):
     else:
         return 0, 0
 
-    return
+    return 0, 0
 
 
 def svgparse_viewbox(root):
@@ -73,9 +75,9 @@ def svgparse_viewbox(root):
     return w / v_w
 
 
-def path2shapely(path, object_type, res=1.0, units='MM', factor=1.0):
+def path2shapely(path, object_type, res=1.0, units='MM', factor=1.0) -> Polygon | LineString | List | None:
     """
-    Converts an svg.path.Path into a Shapely
+    Converts a svg.path.Path into a Shapely
     Polygon or LinearString.
 
     :param path:        svg.path.Path instance
@@ -100,7 +102,7 @@ def path2shapely(path, object_type, res=1.0, units='MM', factor=1.0):
         # Line
         if isinstance(component, Line):
             start = component.start
-            x, y = start.real, start.imag
+            x, y = factor * start.real, factor * start.imag
             if len(points) == 0 or points[-1] != (x, y):
                 points.append((x, y))
             end = component.end
@@ -242,8 +244,8 @@ def svgrect2shapely(rect, n_points=32, factor=1.0):
     :type factor:       float
     :return:            shapely.geometry.polygon.LinearRing
     """
-    w = svgparselength(rect.get('width'))[0]
-    h = svgparselength(rect.get('height'))[0]
+    w = svgparselength(rect.get('width'))[0] * factor
+    h = svgparselength(rect.get('height'))[0] * factor
 
     x_obj = rect.get('x')
     if x_obj is not None:
@@ -258,9 +260,7 @@ def svgrect2shapely(rect, n_points=32, factor=1.0):
         y = 0
 
     rxstr = rect.get('rx')
-    rxstr = rxstr * factor if rxstr else rxstr
     rystr = rect.get('ry')
-    rystr = rystr * factor if rystr else rystr
 
     if rxstr is None and rystr is None:  # Sharp corners
         pts = [
@@ -268,8 +268,8 @@ def svgrect2shapely(rect, n_points=32, factor=1.0):
         ]
 
     else:  # Rounded corners
-        rx = 0.0 if rxstr is None else svgparselength(rxstr)[0]
-        ry = 0.0 if rystr is None else svgparselength(rystr)[0]
+        rx = 0.0 if rxstr is None else svgparselength(rxstr)[0] * factor
+        ry = 0.0 if rystr is None else svgparselength(rystr)[0] * factor
 
         n_points = int(n_points / 4 + 0.5)
         t = np.arange(n_points, dtype=float) / n_points / 4
@@ -501,17 +501,24 @@ def getsvggeo(node, object_type, root=None, units='MM', res=64, factor=1.0, app=
         # log.debug('***USE***')
         # href= is the preferred name for this[1], but inkscape still generates xlink:href=.
         # [1] https://developer.mozilla.org/en-US/docs/Web/SVG/Element/use#Attributes
-        href = node.attrib['href'] if 'href' in node.attrib else node.attrib['{http://www.w3.org/1999/xlink}href']
-        ref = root.find(".//*[@id='%s']" % href.replace('#', ''))
-        if ref is not None:
-            geo = getsvggeo(ref, object_type, root=root, units=units, res=res, factor=factor, app=app)
+        href = node.attrib.get('href', node.attrib.get('{http://www.w3.org/1999/xlink}href'))
+        if href is None:
+            log.warning("SVG 'use' element missing href attribute. Skipping.")
+        else:
+            ref = root.find(".//*[@id='%s']" % href.replace('#', ''))
+            if ref is not None:
+                geo = getsvggeo(ref, object_type, root=root, units=units, res=res, factor=factor, app=app)
+                # Apply x/y offset per SVG spec
+                use_x = svgparselength(node.get('x'))[0] * factor if node.get('x') else 0.0
+                use_y = svgparselength(node.get('y'))[0] * factor if node.get('y') else 0.0
+                if (use_x != 0.0 or use_y != 0.0) and geo:
+                    geo = [translate(geoi, use_x, use_y) for geoi in geo]
 
-    elif kind in ['defs', 'namedview', 'format', 'type', 'title', 'desc', 'svg']:
-        log.warning('SVG Element not supported: %s. Skipping to next.' % kind)
+    elif kind in ['defs', 'symbol', 'namedview', 'format', 'type', 'title', 'desc', 'svg']:
+        log.debug('SVG Element %s skipped (metadata/definition).' % kind)
 
     elif kind in ['g']:
-        log.warning("SVG Element %s not supported and causing failure. Cancelling." % kind)
-        return "fail"
+        log.debug("SVG Element %s is empty, skipping." % kind)
 
     else:
         log.warning("Unknown kind: " + kind)
@@ -673,7 +680,7 @@ def parse_svg_point_list(ptliststr, factor):
         if i % 2 == 1:
             pairs.append((factor * last, factor * val))
         else:
-            last = val * factor
+            last = val
 
         pos = match.end()
         i += 1

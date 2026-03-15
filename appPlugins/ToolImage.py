@@ -14,8 +14,10 @@ from copy import deepcopy
 import numpy as np
 import os
 
-from shapely import LineString, MultiLineString, Polygon, MultiPolygon, shape
+from shapely import LineString, MultiLineString, Polygon, MultiPolygon
 from shapely.affinity import scale, translate
+from shapely.geometry import shape
+
 import gettext
 import appTranslation as fcTranslate
 import builtins
@@ -452,15 +454,26 @@ class ToolImage(AppTool):
         svg_parsed_dims = svgparselength(svg_root.get('height'))
         h = svg_parsed_dims[0]
         svg_units = svg_parsed_dims[1]
-        if svg_units in ['em', 'ex', 'pt', 'px']:
+
+        svg_unit_to_mm = {
+            'mm': 1.0,
+            'cm': 10.0,
+            'in': 25.4,
+            'px': 25.4 / 96.0,
+            'pt': 25.4 / 72.0,
+        }
+
+        if svg_units in ['em', 'ex', '%']:
             self.app.log.error("ToolImage.import_image_as_trace_handler(). SVG units not supported: %s" % svg_units)
             return "fail"
 
         res = self.app.options['geometry_circle_steps']
         factor = svgparse_viewbox(svg_root)
 
-        if svg_units == 'cm':
-            factor *= 10
+        if svg_units in svg_unit_to_mm:
+            unit_factor = svg_unit_to_mm[svg_units]
+            factor *= unit_factor
+            h *= unit_factor
 
         geos = getsvggeo(svg_root, obj_type, units=units, res=res, factor=factor, app=self.app)
         if geos is None:

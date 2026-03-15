@@ -2067,11 +2067,31 @@ class Gerber(Geometry):
         # Change origin to bottom left
         # h = float(svg_root.get('height'))
         # w = float(svg_root.get('width'))
-        h = svgparselength(svg_root.get('height'))[0]  # TODO: No units support yet
+        svg_parsed_dims = svgparselength(svg_root.get('height'))
+        h = svg_parsed_dims[0]
+        svg_units = svg_parsed_dims[1]
+
+        svg_unit_to_mm = {
+            'mm': 1.0,
+            'cm': 10.0,
+            'in': 25.4,
+            'px': 25.4 / 96.0,
+            'pt': 25.4 / 72.0,
+        }
+
+        if svg_units in ['em', 'ex', '%']:
+            self.app.log.error("ParseGerber.import_svg(). SVG units not supported: %s" % svg_units)
+            return 'fail'
 
         units = self.app.app_units if units is None else units
         res = self.app.options['gerber_circle_steps']
         factor = svgparse_viewbox(svg_root)
+
+        if svg_units in svg_unit_to_mm:
+            unit_factor = svg_unit_to_mm[svg_units]
+            factor *= unit_factor
+            h *= unit_factor
+
         geos = getsvggeo(svg_root, 'gerber', units=units, res=res, factor=factor, app=self.app)
 
         self.app.log.debug("appParsers.ParseGerber.Gerber.import_svg(). Finished parsing the SVG geometry.")

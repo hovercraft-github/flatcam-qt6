@@ -12,6 +12,10 @@ CHANGELOG for FlatCAM Evo beta
 
 - remade the workers system; now when assigning a worker we can set the priority of the worker: LOW, NORMAL (default), HIGH
 - improved the DXF parsing performance and fixed some bugs
+- ToolImage: fixed an import error
+- ParseSVG: improved the SVG parser by adding support for pt, px units
+- ParseSVG: added support for "Symbol" SVG element
+- ParseSVG: fixed the usage of offsets, rounded corners and some wrong application of factors
 
 15.02.2026
 
