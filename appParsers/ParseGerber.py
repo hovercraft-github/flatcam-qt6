@@ -1,6 +1,6 @@
 
 from PyQt6 import QtWidgets
-from camlib import Geometry, arc, arc_angle, ApertureMacro, grace, flatten_shapely_geometry
+from camlib import Geometry, arc, arc_angle, ApertureMacro, grace, flatten_shapely_geometry, translate_geometry
 
 from appParsers.ParseDXF import getdxfgeo
 from appParsers.ParseSVG import svgparselength, getsvggeo, svgparse_viewbox
@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Any
 
 from shapely.ops import unary_union, linemerge
+import shapely
 import shapely.affinity as affinity
 from shapely import box as shply_box
 from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, simplify
@@ -2398,40 +2399,19 @@ class Gerber(Geometry):
         if dx == 0 and dy == 0:
             return
 
-        # variables to display the percentage of work done
-        if isinstance(self.solid_geometry, (MultiPolygon, MultiLineString)):
-            self.geo_len = len(self.solid_geometry.geoms)
-        elif isinstance(self.solid_geometry, list):
-            self.geo_len = len(self.solid_geometry)
-        elif isinstance(self.solid_geometry, Polygon):
-            self.geo_len = 1
-        else:
-            self.geo_len = 0
-
-        self.old_disp_number = 0
-        self.el_count = 0
-
-        def offset_geom(obj):
-            if type(obj) is list:
-                new_obj = []
-                for g in obj:
-                    new_obj.append(offset_geom(g))
-                return new_obj
-            else:
-                try:
-                    self.el_count += 1
-                    disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 99]))
-                    if self.old_disp_number < disp_number <= 100:
-                        self.app.proc_container.update_view_text(' %d%%' % disp_number)
-                        self.old_disp_number = disp_number
-
-                    return affinity.translate(obj, xoff=dx, yoff=dy)
-                except AttributeError:
-                    return obj
-
+        # Use vectorized translation for better performance
         # ## Solid geometry
-        self.solid_geometry = offset_geom(self.solid_geometry)
-        self.follow_geometry = offset_geom(self.follow_geometry)
+        self.solid_geometry = translate_geometry(self.solid_geometry, dx, dy)
+        self.follow_geometry = translate_geometry(self.follow_geometry, dx, dy)
+
+        # Progress tracking - count apertures with geometry
+        aperture_count = 0
+        for apid in self.tools:
+            if 'geometry' in self.tools[apid]:
+                aperture_count += len(self.tools[apid]['geometry'])
+        
+        old_disp_number = 0
+        el_count = 0
 
         # we need to offset the geometry stored in the Gerber apertures, too
         try:
@@ -2439,11 +2419,18 @@ class Gerber(Geometry):
                 if 'geometry' in self.tools[apid]:
                     for geo_el in self.tools[apid]['geometry']:
                         if 'solid' in geo_el:
-                            geo_el['solid'] = offset_geom(geo_el['solid'])
+                            geo_el['solid'] = translate_geometry(geo_el['solid'], dx, dy)
                         if 'follow' in geo_el:
-                            geo_el['follow'] = offset_geom(geo_el['follow'])
+                            geo_el['follow'] = translate_geometry(geo_el['follow'], dx, dy)
                         if 'clear' in geo_el:
-                            geo_el['clear'] = offset_geom(geo_el['clear'])
+                            geo_el['clear'] = translate_geometry(geo_el['clear'], dx, dy)
+
+                        # Update progress at aperture level
+                        el_count += 1
+                        disp_number = int(np.interp(el_count, [0, aperture_count], [0, 100]))
+                        if old_disp_number < disp_number <= 100:
+                            self.app.proc_container.update_view_text(' %d%%' % disp_number)
+                            old_disp_number = disp_number
 
         except Exception as e:
             self.app.log.error('ParseGerber.Gerber.offset() Exception --> %s' % str(e))

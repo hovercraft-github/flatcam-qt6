@@ -19,7 +19,9 @@ from shapely import MultiLineString, LinearRing, Polygon, MultiPolygon, LineStri
 from shapely.affinity import scale, translate
 from shapely.ops import unary_union
 
-from camlib import Geometry, flatten_shapely_geometry
+from camlib import Geometry, flatten_shapely_geometry, translate_geometry
+
+import shapely
 
 import re
 import ezdxf
@@ -1256,58 +1258,22 @@ class GeometryObject(FlatCAMObj, Geometry):
         if dx == 0 and dy == 0:
             return
 
-        self.geo_len = 0
-        self.old_disp_number = 0
-        self.el_count = 0
-
-        def translate_recursion(geom):
-            if type(geom) is list:
-                geoms = []
-                for local_geom in geom:
-                    geoms.append(translate_recursion(local_geom))
-                return geoms
-            else:
-                try:
-                    self.el_count += 1
-                    disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 100]))
-                    if self.old_disp_number < disp_number <= 100:
-                        self.app.proc_container.update_view_text(' %d%%' % disp_number)
-                        self.old_disp_number = disp_number
-
-                    return translate(geom, xoff=dx, yoff=dy)
-                except AttributeError:
-                    return geom
-
         if self.multigeo is True:
-            for tool in self.tools:
-                # variables to display the percentage of work done
-                self.geo_len = 0
-                try:
-                    source_geo = self.tools[tool]['solid_geometry']
-                    work_geo = source_geo.geoms if isinstance(source_geo, (MultiPolygon, MultiLineString)) else \
-                        source_geo
-                    self.geo_len = len(work_geo)
-                except TypeError:
-                    self.geo_len = 1
-                self.old_disp_number = 0
-                self.el_count = 0
+            tool_count = len(self.tools)
+            old_disp_number = 0
+            if tool_count > 0:
+                for idx, tool in enumerate(self.tools.keys()):
+                    self.tools[tool]['solid_geometry'] = translate_geometry(
+                        self.tools[tool]['solid_geometry'], dx, dy
+                    )
+                    # Progress tracking per tool
+                    disp_number = int(np.interp(idx + 1, [0, tool_count], [0, 100]))
+                    if old_disp_number < disp_number <= 100:
+                        self.app.proc_container.update_view_text(' %d%%' % disp_number)
+                        old_disp_number = disp_number
 
-                self.tools[tool]['solid_geometry'] = translate_recursion(self.tools[tool]['solid_geometry'])
-
-        # variables to display the percentage of work done
-        self.geo_len = 0
-        try:
-            source_geo = self.solid_geometry
-            work_geo = source_geo.geoms if isinstance(source_geo, (MultiPolygon, MultiLineString)) else \
-                source_geo
-            self.geo_len = len(work_geo)
-        except TypeError:
-            self.geo_len = 1
-
-        self.old_disp_number = 0
-        self.el_count = 0
-
-        self.solid_geometry = translate_recursion(self.solid_geometry)
+        # Main solid_geometry
+        self.solid_geometry = translate_geometry(self.solid_geometry, dx, dy)
 
         self.app.proc_container.new_text = ''
         self.app.inform.emit('[success] %s' % _("Done."))

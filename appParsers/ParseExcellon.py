@@ -6,8 +6,9 @@
 # MIT Licence                                                 #
 # ########################################################## ##
 
-from camlib import Geometry, grace
+from camlib import Geometry, grace, translate_geometry
 
+import shapely
 import shapely.affinity as affinity
 from shapely import Point, LineString, LinearRing, MultiLineString, MultiPolygon
 import numpy as np
@@ -1300,54 +1301,52 @@ class Excellon(Geometry):
         if dx == 0 and dy == 0:
             return
 
-        def offset_geom(obj):
-            try:
-                new_obj = []
-                for geo in obj:
-                    new_obj.append(offset_geom(geo))
-                return new_obj
-            except TypeError:
-                try:
-                    return affinity.translate(obj, xoff=dx, yoff=dy)
-                except AttributeError:
-                    return obj
+        # Progress tracking
+        tool_count = len(self.tools)
+        old_disp_number = 0
 
-        # variables to display the percentage of work done
-        self.geo_len = 0
-        try:
-            self.geo_len = len(self.tools)
-        except TypeError:
-            self.geo_len = 1
-        self.old_disp_number = 0
-        self.el_count = 0
+        for idx, tool in enumerate(self.tools.values()):
+            # Offset Drills - vectorized batch operation
+            if 'drills' in tool and tool['drills']:
+                drills = tool['drills']
+                arr = np.array(drills, dtype=object)
+                coords = shapely.get_coordinates(arr)
+                coords[:, 0] += dx
+                coords[:, 1] += dy
+                tool['drills'] = list(shapely.set_coordinates(arr, coords))
 
-        for tool in self.tools:
-            # Offset Drills
-            if 'drills' in self.tools[tool]:
-                new_drills = []
-                for drill in self.tools[tool]['drills']:
-                    new_drills.append(affinity.translate(drill, xoff=dx, yoff=dy))
-                self.tools[tool]['drills'] = new_drills
+            # Offset Slots - vectorized batch operation
+            if 'slots' in tool and tool['slots']:
+                slots = tool['slots']
+                # Extract all start and stop points
+                start_points = [slot[0] for slot in slots]
+                stop_points = [slot[1] for slot in slots]
+                
+                # Batch translate start points
+                start_arr = np.array(start_points, dtype=object)
+                start_coords = shapely.get_coordinates(start_arr)
+                start_coords[:, 0] += dx
+                start_coords[:, 1] += dy
+                translated_starts = shapely.set_coordinates(start_arr, start_coords)
+                
+                # Batch translate stop points
+                stop_arr = np.array(stop_points, dtype=object)
+                stop_coords = shapely.get_coordinates(stop_arr)
+                stop_coords[:, 0] += dx
+                stop_coords[:, 1] += dy
+                translated_stops = shapely.set_coordinates(stop_arr, stop_coords)
+                
+                # Reconstruct slots
+                tool['slots'] = list(zip(translated_starts, translated_stops))
 
-            # Offset Slots
-            if 'slots' in self.tools[tool]:
-                new_slots = []
-                for slot in self.tools[tool]['slots']:
-                    new_start = affinity.translate(slot[0], xoff=dx, yoff=dy)
-                    new_stop = affinity.translate(slot[1], xoff=dx, yoff=dy)
-                    new_slot = (new_start, new_stop)
-                    new_slots.append(new_slot)
-                self.tools[tool]['slots'] = new_slots
+            # Offset solid_geometry using vectorized translate
+            tool['solid_geometry'] = translate_geometry(tool['solid_geometry'], dx, dy)
 
-            # Offset solid_geometry
-            self.tools[tool]['solid_geometry'] = offset_geom(self.tools[tool]['solid_geometry'])
-
-            # update status display
-            self.el_count += 1
-            disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 100]))
-            if self.old_disp_number < disp_number <= 100:
+            # update status display per tool
+            disp_number = int(np.interp(idx + 1, [0, tool_count], [0, 100]))
+            if old_disp_number < disp_number <= 100:
                 self.app.proc_container.update_view_text(' %d%%' % disp_number)
-                self.old_disp_number = disp_number
+                old_disp_number = disp_number
 
         # Recreate geometry
         self.create_geometry()

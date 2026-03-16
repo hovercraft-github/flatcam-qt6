@@ -7691,27 +7691,25 @@ class CNCjob(Geometry):
             # offset Gcode
             self.gcode = offset_g(self.gcode)
 
-            # variables to display the percentage of work done
-            self.geo_len = 0
-            try:
-                self.geo_len = len(self.gcode_parsed)
-            except TypeError:
-                self.geo_len = 1
-            self.old_disp_number = 0
-            self.el_count = 0
-
-            # offset geometry
-            for g in self.gcode_parsed:
+            # Vectorized geometry translation using Shapely 2.0+
+            # Check for empty or None gcode_parsed
+            if self.gcode_parsed:
                 try:
-                    g['geom'] = affinity.translate(g['geom'], xoff=dx, yoff=dy)
-                except AttributeError:
-                    return g['geom']
+                    geoms = np.array([g['geom'] for g in self.gcode_parsed], dtype=object)
+                    coords = shapely.get_coordinates(geoms)
+                    if coords.size > 0:
+                        coords[:, 0] += dx
+                        coords[:, 1] += dy
+                        translated = shapely.set_coordinates(geoms, coords)
+                        for g, new_geom in zip(self.gcode_parsed, translated):
+                            g['geom'] = new_geom
+                except Exception as e:
+                    self.app.log.error('CNCjob.offset() vectorized translation failed: %s' % str(e))
+                    self.app.proc_container.new_text = ''
+                    return
 
-                self.el_count += 1
-                disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 100]))
-                if self.old_disp_number < disp_number <= 100:
-                    self.app.proc_container.update_view_text(' %d%%' % disp_number)
-                    self.old_disp_number = disp_number
+            # Show completion
+            self.app.proc_container.update_view_text(' %d%%' % 100)
 
             self.create_geometry()
         else:
@@ -7720,30 +7718,29 @@ class CNCjob(Geometry):
                 # offset Gcode
                 v['gcode'] = offset_g(v['gcode'])
 
-                # variables to display the percentage of work done
-                self.geo_len = 0
-                try:
-                    self.geo_len = len(v['gcode_parsed'])
-                except TypeError:
-                    self.geo_len = 1
-                self.old_disp_number = 0
-                self.el_count = 0
-
-                # offset gcode_parsed
-                for g in v['gcode_parsed']:
+                # Vectorized geometry translation using Shapely 2.0+
+                # Check for empty or None gcode_parsed
+                if v.get('gcode_parsed'):
                     try:
-                        g['geom'] = affinity.translate(g['geom'], xoff=dx, yoff=dy)
-                    except AttributeError:
-                        return g['geom']
-
-                    self.el_count += 1
-                    disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 100]))
-                    if self.old_disp_number < disp_number <= 100:
-                        self.app.proc_container.update_view_text(' %d%%' % disp_number)
-                        self.old_disp_number = disp_number
+                        geoms = np.array([g['geom'] for g in v['gcode_parsed']], dtype=object)
+                        coords = shapely.get_coordinates(geoms)
+                        if coords.size > 0:
+                            coords[:, 0] += dx
+                            coords[:, 1] += dy
+                            translated = shapely.set_coordinates(geoms, coords)
+                            for g, new_geom in zip(v['gcode_parsed'], translated):
+                                g['geom'] = new_geom
+                    except Exception as e:
+                        self.app.log.error('CNCjob.offset() multitool vectorized translation failed: %s' % str(e))
+                        self.app.proc_container.new_text = ''
+                        return
 
                 # for the bounding box
-                v['solid_geometry'] = unary_union([geo['geom'] for geo in v['gcode_parsed']])
+                if v.get('gcode_parsed'):
+                    v['solid_geometry'] = unary_union([geo['geom'] for geo in v['gcode_parsed']])
+
+                # Show completion per tool
+                self.app.proc_container.update_view_text(' %d%%' % 100)
 
         self.app.proc_container.new_text = ''
 
@@ -7860,8 +7857,81 @@ class CNCjob(Geometry):
                 self.app.proc_container.update_view_text(' %d%%' % disp_number)
                 self.old_disp_number = disp_number
 
-        self.create_geometry()
-        self.app.proc_container.new_text = ''
+
+def translate_geometry(obj, dx, dy):
+    """
+    Fast geometry translation using Shapely 2.0+ vectorized coordinate ops.
+
+    Handles:
+    - Flat list of geometries: batch translate all at once
+    - Nested list: recurse, batching each flat sub-list
+    - Single geometry (including Multi*): direct vectorized translation
+    - Empty/non-geometry: return as-is
+
+    :param obj: Geometry object or list of geometries
+    :param dx: X offset
+    :param dy: Y offset
+    :return: Translated geometry
+    """
+    # Handle None or empty cases
+    if obj is None:
+        return None
+    
+    if isinstance(obj, list):
+        if not obj:
+            return []
+        # Check for nested lists
+        if any(isinstance(item, list) for item in obj):
+            return [translate_geometry(item, dx, dy) for item in obj]
+        # Flat list - vectorized batch operation
+        # Filter out None values and empty geometries
+        valid_geoms = [g for g in obj if g is not None]
+        if not valid_geoms:
+            return obj
+        
+        try:
+            arr = np.array(valid_geoms, dtype=object)
+            coords = shapely.get_coordinates(arr)
+            if coords.size == 0:
+                return obj
+            coords[:, 0] += dx
+            coords[:, 1] += dy
+            translated = shapely.set_coordinates(arr, coords)
+            # Map back to original list, preserving None positions
+            result = []
+            idx = 0
+            for g in obj:
+                if g is None:
+                    result.append(None)
+                else:
+                    result.append(translated[idx])
+                    idx += 1
+            return result
+        except Exception:
+            # Fallback to individual translation on error
+            result = []
+            for g in obj:
+                if g is not None:
+                    try:
+                        result.append(translate_geometry(g, dx, dy))
+                    except Exception:
+                        result.append(g)
+                else:
+                    result.append(None)
+            return result
+    elif isinstance(obj, BaseGeometry):
+        try:
+            coords = shapely.get_coordinates(obj)
+            if coords.size == 0:
+                return obj
+            coords[:, 0] += dx
+            coords[:, 1] += dy
+            return shapely.set_coordinates(obj, coords)
+        except Exception:
+            # Fallback to affinity.translate
+            return affinity.translate(obj, xoff=dx, yoff=dy)
+    else:
+        return obj
 
 
 def flatten_shapely_geometry(geometry, simplify_tolerance: float = 0.0) -> list:

@@ -1314,6 +1314,9 @@ class CNCJobObject(FlatCAMObj, CNCjob):
 
         visible = visible if visible else self.obj_options['plot']
 
+        # Clear old annotations data so plot2() repopulates from current (possibly moved) geometry
+        self.annotations_dict = {}
+
         # Geometry shapes plotting
         try:
             if self.multitool is False:  # single tool usage
