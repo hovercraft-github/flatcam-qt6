@@ -1413,6 +1413,34 @@ class GeometryObject(FlatCAMObj, Geometry):
 
         return factor
 
+    def _collect_elements(self, element, color=None, collected=None):
+        """
+        Recursively collect leaf geometries into a flat list for batch submission.
+
+        :param element: geometry or collection of geometries
+        :param color: color for these geometries
+        :param collected: list to append to (created if None)
+        :return: list of dicts suitable for add_shapes_batch()
+        """
+        if collected is None:
+            collected = []
+
+        if color is None:
+            color = '#FF0000FF'
+
+        try:
+            if isinstance(element, (MultiPolygon, MultiLineString)):
+                for sub_el in element.geoms:
+                    self._collect_elements(sub_el, color=color, collected=collected)
+            else:
+                for sub_el in element:
+                    self._collect_elements(sub_el, color=color, collected=collected)
+        except TypeError:
+            # Leaf element - not iterable
+            collected.append({'shape': element, 'color': color, 'layer': 0})
+
+        return collected
+
     def plot_element(self, element, color=None, visible=None):
 
         if color is None:
@@ -1469,6 +1497,9 @@ class GeometryObject(FlatCAMObj, Geometry):
                 return new_color
 
         try:
+            batch = []
+            visible = visible if visible else self.obj_options['plot']
+
             # plot solid geometries found as members of self.tools attribute dict
             # for MultiGeo
             if self.multigeo is True:  # geo multi tool usage
@@ -1481,7 +1512,7 @@ class GeometryObject(FlatCAMObj, Geometry):
                             color = random_color() if self.obj_options['multicolored'] else \
                                 self.app.options["geometry_plot_line"]
 
-                        self.plot_element(solid_geometry, visible=visible, color=color)
+                        batch.extend(self._collect_elements(solid_geometry, color=color))
                 else:
                     solid_geometry = self.tools[plot_tool]['solid_geometry']
                     if 'override_color' in self.tools[plot_tool]['data']:
@@ -1490,7 +1521,7 @@ class GeometryObject(FlatCAMObj, Geometry):
                         color = random_color() if self.obj_options['multicolored'] else \
                             self.app.options["geometry_plot_line"]
 
-                    self.plot_element(solid_geometry, visible=visible, color=color)
+                    batch.extend(self._collect_elements(solid_geometry, color=color))
             else:
                 # plot solid geometry that may be a direct attribute of the geometry object
                 # for SingleGeo
@@ -1498,9 +1529,10 @@ class GeometryObject(FlatCAMObj, Geometry):
                     solid_geometry = self.solid_geometry
                     color = self.app.options["geometry_plot_line"]
 
-                    self.plot_element(solid_geometry, visible=visible, color=color)
+                    batch.extend(self._collect_elements(solid_geometry, color=color))
 
-            # self.plot_element(self.solid_geometry, visible=self.obj_options['plot'])
+            if batch:
+                self.add_shapes_batch(batch, visible=visible)
 
             self.shapes.redraw()
 

@@ -203,6 +203,21 @@ class FlatCAMObj(QtCore.QObject):
             key = self.shapes.add(tolerance=tol, **kwargs)
         return key
 
+    def add_shapes_batch(self, shapes_data, **kwargs):
+        """
+        Batch version of add_shape(). Submits all shapes in one pool call.
+
+        :param shapes_data: list of dicts with keys: 'shape', 'color', 'face_color', 'alpha', 'layer', 'tolerance'
+        :param kwargs: passed to ShapeCollectionVisual.add_batch()
+        :return: list of shape keys
+        """
+        tol = kwargs.pop('tolerance', self.drawing_tolerance)
+
+        if self.deleted:
+            raise ObjectDeleted()
+
+        return self.shapes.add_batch(shapes_data, tolerance=tol, **kwargs)
+
     def add_mark_shape(self, **kwargs):
         tol = kwargs['tolerance'] if 'tolerance' in kwargs else self.drawing_tolerance
 

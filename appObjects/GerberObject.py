@@ -951,6 +951,7 @@ class GerberObject(FlatCAMObj, Gerber):
         try:
             plot_geometry = geometry.geoms if isinstance(geometry, (MultiPolygon, MultiLineString)) else geometry
             try:
+                batch = []
                 for g in plot_geometry:
                     if self.obj_options["solid"]:
                         used_color = color
@@ -962,11 +963,19 @@ class GerberObject(FlatCAMObj, Gerber):
                     if self.app.options["gerber_plot_line_enable"] is False:
                         used_color = None
                     if isinstance(g, (Polygon, LineString)):
-                        self.add_shape(shape=g, color=used_color, face_color=used_face_color, visible=visible)
+                        batch.append({
+                            'shape': g, 'color': used_color, 'face_color': used_face_color
+                        })
                     elif isinstance(g, LinearRing):
-                        g = LineString(g)
-                        self.add_shape(shape=g, color=used_color, face_color=used_face_color, visible=visible)
+                        batch.append({
+                            'shape': LineString(g), 'color': used_color, 'face_color': used_face_color
+                        })
+
+                if batch:
+                    self.add_shapes_batch(batch, visible=visible)
+
             except TypeError:
+                # Single geometry, not iterable
                 if self.obj_options["solid"]:
                     used_color = color
                     used_face_color = random_color() if self.obj_options['multicolored'] else face_color
@@ -981,6 +990,7 @@ class GerberObject(FlatCAMObj, Gerber):
                 elif isinstance(plot_geometry, LinearRing):
                     plot_geometry = LineString(plot_geometry)
                     self.add_shape(shape=plot_geometry, color=used_color, face_color=used_face_color, visible=visible)
+
             self.shapes.redraw(
                 # update_colors=(self.fill_color, self.outline_color),
                 # indexes=self.app.plotcanvas.shape_collection.data.keys()

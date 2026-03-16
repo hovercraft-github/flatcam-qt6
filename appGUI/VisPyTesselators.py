@@ -96,4 +96,18 @@ class GLUTess:
         # Free resources
         GLU.gluDeleteTess(tess)
 
+        # Enforce CCW winding order for OpenGL backface culling compatibility
+        # Process triangles in groups of 3 indices
+        for i in range(0, len(self.tris), 3):
+            i0, i1, i2 = self.tris[i], self.tris[i + 1], self.tris[i + 2]
+            # Get vertex coordinates
+            p0 = self.pts[i0]
+            p1 = self.pts[i1]
+            p2 = self.pts[i2]
+            # Cross product Z component of edges (p1-p0) x (p2-p0)
+            cross_z = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+            if cross_z < 0:
+                # Clockwise — swap to make CCW
+                self.tris[i + 1], self.tris[i + 2] = self.tris[i + 2], self.tris[i + 1]
+
         return self.tris, self.pts

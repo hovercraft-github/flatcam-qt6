@@ -6554,23 +6554,27 @@ class CNCjob(Geometry):
             tooldia = tooldia[0] if tooldia[0] is not None else self.tooldia
 
         if tooldia == 0:
+            batch = []
             for geo in gcode_parsed:
                 if not geo:
                     continue
                 if kind == 'all':
-                    obj.add_shape(shape=geo['geom'], color=color[geo['kind'][0]][1], visible=visible)
+                    batch.append({'shape': geo['geom'], 'color': color[geo['kind'][0]][1]})
                 elif kind == 'travel':
                     if geo['kind'][0] == 'T':
-                        obj.add_shape(shape=geo['geom'], color=color['T'][1], visible=visible)
+                        batch.append({'shape': geo['geom'], 'color': color['T'][1]})
                 elif kind == 'cut':
                     if geo['kind'][0] == 'C':
-                        obj.add_shape(shape=geo['geom'], color=color['C'][1], visible=visible)
+                        batch.append({'shape': geo['geom'], 'color': color['C'][1]})
+            if batch:
+                obj.add_shapes_batch(batch, visible=visible)
         else:
             path_num = 0
 
             self.coordinates_type = self.app.options["cncjob_coords_type"]
             if self.coordinates_type == "G90":
                 # For Absolute coordinates type G90
+                batch = []
                 for geo in gcode_parsed:
                     if not geo:
                         continue
@@ -6618,18 +6622,29 @@ class CNCjob(Geometry):
                         poly = geo['geom'].buffer((tooldia / 1.99999999), self.steps_per_circle)
                         poly = poly.simplify(tool_tolerance)
 
-                    # Plotting the shapes
+                    # Collect into batch instead of add_shape
                     if kind == 'all':
-                        obj.add_shape(shape=poly, color=color[geo['kind'][0]][1], face_color=color[geo['kind'][0]][0],
-                                      visible=visible, layer=1 if geo['kind'][0] == 'C' else 2)
+                        batch.append({
+                            'shape': poly,
+                            'color': color[geo['kind'][0]][1],
+                            'face_color': color[geo['kind'][0]][0],
+                            'layer': 1 if geo['kind'][0] == 'C' else 2
+                        })
                     elif kind == 'travel':
                         if geo['kind'][0] == 'T':
-                            obj.add_shape(shape=poly, color=color['T'][1], face_color=color['T'][0],
-                                          visible=visible, layer=2)
+                            batch.append({
+                                'shape': poly, 'color': color['T'][1],
+                                'face_color': color['T'][0], 'layer': 2
+                            })
                     elif kind == 'cut':
                         if geo['kind'][0] == 'C':
-                            obj.add_shape(shape=poly, color=color['C'][1], face_color=color['C'][0],
-                                          visible=visible, layer=1)
+                            batch.append({
+                                'shape': poly, 'color': color['C'][1],
+                                'face_color': color['C'][0], 'layer': 1
+                            })
+
+                if batch:
+                    obj.add_shapes_batch(batch, visible=visible)
             else:
                 self.app.inform.emit('[ERROR_NOTCL] %s...' % _('G91 coordinates not implemented'))
                 return 'fail'

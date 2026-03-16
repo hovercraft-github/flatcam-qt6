@@ -111,19 +111,16 @@ def _linearring_to_segments(arr):
     :return: numpy.array
         Line segments
     """
-    # Optimized: avoid input mutation and use zip for pair generation
-    # Check if ring needs closing (first != last)
+    # Use zip for pair generation - works for both open and closed rings
+    # zip(arr[:-1], arr[1:]) gives pairs of consecutive elements
+    segments = [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
+    
+    # Close ring if not already closed (add final segment from last to first)
     if arr[0] != arr[-1]:
-        # Ring is open - use zip with first element appended for closing segment
-        # zip(arr[:-1], arr[1:]) gives pairs for all consecutive elements
-        # Then add the closing pair (last, first)
-        segments = [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
         segments.append(arr[-1])
         segments.append(arr[0])
-        return segments
-    else:
-        # Ring is already closed - just get consecutive pairs
-        return [coord for pair in zip(arr[:-1], arr[1:]) for coord in pair]
+    
+    return segments
 
 
 def _linestring_to_segments(arr):
@@ -156,13 +153,21 @@ class ShapeGroup(object):
     def add(self, **kwargs):
         """
         Adds shape to collection and store index in group
-        :param kwargs: keyword arguments
+        :param kwargs: keyword arguments.
             Arguments for ShapeCollection.add function
         """
         key = self._collection.add(**kwargs)
         self._indexes.append(key)
         return key
 
+    def add_batch(self, shapes_data, **kwargs):
+        """
+        Batch adds shapes to collection and stores indexes in group.
+        """
+        keys = self._collection.add_batch(shapes_data, **kwargs)
+        self._indexes.extend(keys)
+        return keys
+    
     def remove(self, idx, update=False):
         self._indexes.remove(idx)
         self._collection.remove(idx, False)
@@ -273,6 +278,7 @@ class ShapeCollectionVisual(CompoundVisual):
         # Process pool
         self.pool = pool
         self.results = {}
+        self._batch_results = []  # NEW: list of (keys, AsyncResult) tuples for batch processing
 
         self._meshes = [MeshVisual() for _ in range(0, layers)]
         # self._lines = [LineVisual(antialias=True) for _ in range(0, layers)]
@@ -286,8 +292,11 @@ class ShapeCollectionVisual(CompoundVisual):
         CompoundVisual.__init__(self, visuals_, **kwargs)
 
         for m in self._meshes:
-            pass
-            m.set_gl_state(polygon_offset_fill=True, polygon_offset=(1, 1), cull_face=False)
+            # Backface culling - now safe with CCW winding enforcement in tessellator
+            cull = True
+            if self.fc_options:
+                cull = self.fc_options.get("global_backface_culling", False)
+            m.set_gl_state(polygon_offset_fill=True, polygon_offset=(1, 1), cull_face=cull)
 
         for lne in self._lines:
             pass
@@ -347,14 +356,8 @@ class ShapeCollectionVisual(CompoundVisual):
         if linewidth:
             self._line_width = linewidth
 
-        if self.fc_options and self.fc_options["global_graphic_engine_3d_no_mp"] is True:
-            self.data[key] = _update_shape_buffers(self.data[key])
-        else:
-            # Add data to process pool if pool exists
-            try:
-                self.results[key] = self.pool.map_async(_update_shape_buffers, [self.data[key]])
-            except Exception:
-                self.data[key] = _update_shape_buffers(self.data[key])
+        # Always process synchronously for individual adds (pool IPC overhead > compute)
+        self.data[key] = _update_shape_buffers(self.data[key])
 
         # Mark buffers as dirty
         self._dirty = True
@@ -363,6 +366,67 @@ class ShapeCollectionVisual(CompoundVisual):
             self.redraw()   # redraw() waits for pool process end
 
         return key
+
+    def add_batch(self, shapes_data, layer=1, tolerance=0.001, linewidth=None, visible=True):
+        """
+        Add multiple shapes in one pool call. Dramatically reduces IPC overhead.
+
+        :param shapes_data: list of dicts, each with keys:
+            'shape' (required), 'color', 'face_color', 'alpha', 'layer', 'tolerance'
+        :param layer: int - default layer for shapes that don't specify one
+        :param tolerance: float - default tolerance for shapes that don't specify one
+        :param linewidth: int - line width override
+        :param visible: bool - visibility for all shapes in the batch
+        :return: list of int - keys for all added shapes (in same order as shapes_data)
+        """
+        if not shapes_data:
+            return []
+
+        if linewidth:
+            self._line_width = linewidth
+
+        keys = []
+        data_list = []
+
+        self.key_lock.acquire(True)
+        for item in shapes_data:
+            self.last_key += 1
+            key = self.last_key
+            keys.append(key)
+            self.data[key] = {
+                'geometry': item.get('shape'),
+                'color': item.get('color'),
+                'alpha': item.get('alpha'),
+                'face_color': item.get('face_color'),
+                'visible': visible,
+                'layer': item.get('layer', layer),
+                'tolerance': item.get('tolerance', tolerance),
+                'mesh_vertices': [],
+                'mesh_tris': [],
+                'mesh_colors': [],
+                'line_pts': [],
+                'line_colors': []
+            }
+            data_list.append(self.data[key])
+        self.key_lock.release()
+
+        if self.fc_options and self.fc_options.get("global_graphic_engine_3d_no_mp") is True:
+            # Synchronous mode
+            for k, d in zip(keys, data_list):
+                self.data[k] = _update_shape_buffers(d)
+        else:
+            try:
+                # ONE pool.map_async call for ALL shapes
+                # Pool distributes items across workers automatically
+                result = self.pool.map_async(_update_shape_buffers, data_list)
+                self._batch_results.append((keys, result))
+            except Exception:
+                # Fallback: process synchronously
+                for k, d in zip(keys, data_list):
+                    self.data[k] = _update_shape_buffers(d)
+
+        self._dirty = True
+        return keys
 
     def remove(self, key, update=False):
         """
@@ -611,10 +675,12 @@ class ShapeCollectionVisual(CompoundVisual):
         mesh_tris = [list(chain.from_iterable(layer_mesh_tris_chunks[i])) for i in range(len(self._meshes))]
         mesh_colors = [list(chain.from_iterable(layer_mesh_colors_chunks[i])) for i in range(len(self._meshes))]
 
+        # Set GPU state once, outside the mesh loop (Step 1a optimization)
+        set_state(polygon_offset_fill=False)
+
         # Updating meshes
         for i, mesh in enumerate(self._meshes):
             if len(mesh_vertices[i]) > 0:
-                set_state(polygon_offset_fill=False)
                 faces_array = np.asarray(mesh_tris[i], dtype=np.uint32)
                 mesh.set_data(
                     vertices=np.asarray(mesh_vertices[i]),
@@ -661,6 +727,23 @@ class ShapeCollectionVisual(CompoundVisual):
         self.results_lock.acquire(True)
 
         results_collected = False
+
+        # --- Collect batch results (Step 3c optimization) ---
+        for batch_keys, batch_result in self._batch_results:
+            try:
+                batch_result.wait()
+                batch_data = batch_result.get()
+                for k, r in zip(batch_keys, batch_data):
+                    if k in self.data:
+                        self.data[k] = r
+                        results_collected = True
+            except Exception as e:
+                print("VisPyVisuals.ShapeCollectionVisual.redraw() --> Batch error = %s" % str(e))
+
+        self._batch_results.clear()
+        # --- End batch results collection ---
+
+        # Existing per-shape result collection (backward compat with add())
         for i in list(self.data.keys()) if not indexes else indexes:
             if i in list(self.results.keys()):
                 try:
@@ -872,8 +955,7 @@ def create_fast_node(subclass):
 
     # Decide on new class name
     clsname = subclass.__name__
-    if not (clsname.endswith('Visual') and
-            issubclass(subclass, visuals.BaseVisual)):
+    if not (clsname.endswith('Visual') and issubclass(subclass, visuals.BaseVisual)):
         raise RuntimeError('Class "%s" must end with Visual, and must '
                            'subclass BaseVisual' % clsname)
     clsname = clsname[:-6]
@@ -904,8 +986,9 @@ def create_fast_node(subclass):
         self.freeze()
 
     # Create new class
-    cls = type(clsname, (VisualNode, subclass),
-               {'__init__': __init__, '__doc__': doc})
+    cls = type(
+        clsname, (VisualNode, subclass), {'__init__': __init__, '__doc__': doc}
+    )
 
     # 'Enabled' property clears/restores 'parent' property of Node class
     # Scene will be painted quicker than when using 'visible' property

@@ -77,6 +77,7 @@ class AppDefaults:
         "units_precision": 4,
         "global_graphic_engine": '3D',
         "global_graphic_engine_3d_no_mp": False,
+        "global_backface_culling": True,
         "global_app_level": 'b',
 
         "global_log_verbose": 2,

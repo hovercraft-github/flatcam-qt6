@@ -1309,7 +1309,10 @@ class ExcellonObject(FlatCAMObj, Excellon):
         try:
             # Plot Excellon (All polygons?)
             if self.ui.solid_cb.get_value():
-                # plot polygons for each tool separately
+                # Collect all shapes into one batch, tracking tool boundaries
+                batch = []
+                tool_ranges = {}  # tool -> (start_index, end_index) in batch
+
                 for tool in self.tools:
                     # set the color here so we have one color for each tool
                     geo_color = random_color()
@@ -1318,18 +1321,23 @@ class ExcellonObject(FlatCAMObj, Excellon):
                     else:
                         self.tools[tool]['multicolor'] = None
 
-                    # tool is a dict also
+                    batch_start = len(batch)
                     for geo in self.tools[tool]["solid_geometry"]:
-                        idx = self.add_shape(shape=geo,
-                                             color=geo_color if multicolored else self.outline_color,
-                                             face_color=geo_color if multicolored else self.fill_color,
-                                             visible=visible,
-                                             layer=2)
-                        try:
-                            self.shape_indexes_dict[tool].append(idx)
-                        except KeyError:
-                            self.shape_indexes_dict[tool] = [idx]
+                        batch.append({
+                            'shape': geo,
+                            'color': geo_color if multicolored else self.outline_color,
+                            'face_color': geo_color if multicolored else self.fill_color,
+                            'layer': 2
+                        })
+                    tool_ranges[tool] = (batch_start, len(batch))
+
+                if batch:
+                    keys = self.add_shapes_batch(batch, visible=visible)
+                    # Map returned keys back to tools
+                    for tool, (start, end) in tool_ranges.items():
+                        self.shape_indexes_dict[tool] = list(keys[start:end])
             else:
+                # Non-solid mode: plot outlines only (fewer shapes, keep individual add)
                 for tool in self.tools:
                     for geo in self.tools[tool]['solid_geometry']:
                         idx = self.add_shape(shape=geo.exterior, color='red', visible=visible)
@@ -1343,10 +1351,6 @@ class ExcellonObject(FlatCAMObj, Excellon):
                                 self.shape_indexes_dict[tool].append(idx)
                             except KeyError:
                                 self.shape_indexes_dict[tool] = [idx]
-                # for geo in self.solid_geometry:
-                #     self.add_shape(shape=geo.exterior, color='red', visible=visible)
-                #     for ints in geo.interiors:
-                #         self.add_shape(shape=ints, color='orange', visible=visible)
 
             self.shapes.redraw()
         except (ObjectDeleted, AttributeError) as e:

@@ -347,9 +347,23 @@ class ParseFont:
 
         for item in path:
             if units == 'MM':
-                scaled_path.append(scale(item, 0.0080187969924812, 0.0080187969924812, origin=(coordx, coordy)))
+                scaled_path.append(
+                    scale(
+                        item,
+                        0.0080187969924812,
+                        0.0080187969924812,
+                        origin=(coordx, coordy)
+                    )
+                )
             else:
-                scaled_path.append(scale(item, 0.00031570066, 0.00031570066, origin=(coordx, coordy)))
+                scaled_path.append(
+                    scale(
+                        item,
+                        0.00031570066,
+                        0.00031570066,
+                        origin=(coordx, coordy)
+                    )
+                )
 
         # determine if some polygons are completely inside the other
         interiors = []
@@ -360,6 +374,8 @@ class ParseFont:
             except IndexError:
                 break
 
-        ret_geo = MultiPolygon([x for x in scaled_path if x not in interiors]).difference(MultiPolygon(interiors))
+        ret_geo = MultiPolygon(
+            [x for x in scaled_path if x not in interiors]
+        ).difference(MultiPolygon(interiors))
 
         return ret_geo
