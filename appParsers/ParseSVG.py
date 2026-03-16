@@ -609,16 +609,24 @@ def getsvgtext(node, object_type, app, units='MM'):
             # but the dimensions from Inkscape did not corelate with the ones after importing in FlatCAM
             # so I adjusted this
             font_size = svgparselength(style_dict['font-size'])[0] * 2.2
-            geo = [pf.font_to_geometry(txt,
+            font_geo = pf.font_to_geometry(txt,
                                        font_name=font_name,
                                        font_size=font_size,
                                        font_type=font_type,
                                        units=units,
                                        coordx=pos_x,
                                        coordy=pos_y)
-                   ]
 
-            geo = [(scale(g, 1.0, -1.0)) for g in geo]
+            # Handle edge case: font_to_geometry returns error string or empty geometry
+            if isinstance(font_geo, str):
+                # Error occurred (e.g., "flatcam font parse failed")
+                log.error("Font geometry failed: %s" % font_geo)
+                geo = None
+            elif font_geo.is_empty:
+                # Empty geometry - valid but empty, treat as no geometry
+                geo = None
+            else:
+                geo = [scale(font_geo, 1.0, -1.0)]
         except Exception as e:
             log.error(str(e))
             geo = None

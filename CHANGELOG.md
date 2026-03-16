@@ -21,6 +21,8 @@ CHANGELOG for FlatCAM Evo beta
 - VisPyVisuals: huge improvements in plotting speed on the 3d engine VisPy canvas
 - VisPyVisuals: another whooping ~30% performance boost in plotting / panning / zooming on top of the previous improvements by moving fully to numpy data structures
 - ToolMove: increased the performance of the move tool (and any offsets) by 10...20 % by using the new Shapely 2.0 vectorized operations
+- ParseFont: refactoring and optimization
+- ToolPaint: start the refactoring of the tool
 
 15.02.2026
 

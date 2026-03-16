@@ -156,10 +156,23 @@ class TextInputTool(AppToolEditor):
         string_to_geo = self.ui.text_input_entry.get_value()
         font_to_geo_size = self.ui.font_size_cb.get_value()
 
-        self.text_path = self.f_parse.font_to_geometry(char_string=string_to_geo, font_name=self.font_name,
-                                                       font_size=font_to_geo_size,
-                                                       font_type=font_to_geo_type,
-                                                       units=self.app.app_units.upper())
+        # Call font_to_geometry and handle edge cases
+        font_geo = self.f_parse.font_to_geometry(char_string=string_to_geo, font_name=self.font_name,
+                                                font_size=font_to_geo_size,
+                                                font_type=font_to_geo_type,
+                                                units=self.app.app_units.upper())
+
+        # Handle edge case: font_to_geometry returns error string or empty geometry
+        if isinstance(font_geo, str):
+            # Error occurred (e.g., "flatcam font parse failed")
+            self.app.inform.emit('[ERROR] %s' % font_geo)
+            self.text_path = None
+        elif hasattr(font_geo, 'is_empty') and font_geo.is_empty:
+            # Empty geometry - valid but empty
+            self.app.inform.emit('[WARNING] %s' % _("No geometry generated from text input."))
+            self.text_path = None
+        else:
+            self.text_path = font_geo
 
     def font_family(self, font):
         self.ui.text_input_entry.selectAll()

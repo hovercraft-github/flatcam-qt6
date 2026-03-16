@@ -17,6 +17,7 @@ import glob
 
 from shapely import Polygon, MultiPolygon
 from shapely.affinity import translate, scale
+from shapely.ops import unary_union
 
 import freetype as ft
 from fontTools import ttLib
@@ -35,6 +36,13 @@ log = logging.getLogger('base2')
 
 
 class ParseFont:
+
+    # FreeType uses 26.6 fixed-point (units of 1/64 point).
+    # These factors convert from FreeType units to real-world coordinates.
+    # MM:   (1/64) * (25.4/49.6) — 26.6 fixed-point to millimeters
+    # INCH: (1/64) * (1/49.6)    — 26.6 fixed-point to inches
+    SCALE_MM = 0.0080187969924812
+    SCALE_INCH = 0.00031570066
 
     FONT_SPECIFIER_NAME_ID = 4
     FONT_SPECIFIER_FAMILY_ID = 1
@@ -160,7 +168,7 @@ class ParseFont:
                 if not os.path.dirname(value):
                     value = os.path.join(font_directory, value)
                 value = os.path.abspath(value).lower()
-                if value[-4:] == '.ttf':
+                if value.endswith(('.ttf', '.otf')):
                     items[value] = 1
             return list(items.keys())
         finally:
@@ -179,27 +187,23 @@ class ParseFont:
         name = ""
         family = ""
 
-        font = ttLib.TTFont(font_path)
+        with ttLib.TTFont(font_path) as font:
+            for record in font['name'].names:
+                try:
+                    name_str = record.toUnicode()
+                except (UnicodeDecodeError, AttributeError):
+                    continue
 
-        for record in font['name'].names:
-            if b'\x00' in record.string:
-                name_str = record.string.decode('utf-16-be')
-            else:
-                # name_str = record.string.decode('utf-8')
-                name_str = record.string.decode('latin-1')
+                if record.nameID == ParseFont.FONT_SPECIFIER_NAME_ID and not name:
+                    name = name_str
+                elif record.nameID == ParseFont.FONT_SPECIFIER_FAMILY_ID and not family:
+                    family = name_str
 
-            if record.nameID == ParseFont.FONT_SPECIFIER_NAME_ID and not name:
-                name = name_str
-            elif record.nameID == ParseFont.FONT_SPECIFIER_FAMILY_ID and not family:
-                family = name_str
-
-            if name and family:
-                break
+                if name and family:
+                    break
         return name, family
 
     def __init__(self, app):
-        super(ParseFont, self).__init__()
-
         self.app = app
 
         # regular fonts
@@ -232,8 +236,9 @@ class ParseFont:
             paths = [paths]
 
         for path in paths:
-            for file in glob.glob(os.path.join(path, '*.ttf')):
-                files[os.path.abspath(file)] = 1
+            for ext in ('*.ttf', '*.otf'):
+                for file in glob.glob(os.path.join(path, ext)):
+                    files[os.path.abspath(file)] = 1
 
         return list(files.keys())
 
@@ -272,7 +277,7 @@ class ParseFont:
                 name = name.replace(" Italic", '')
                 self.italic_f.update({name: font})
             elif 'Oblique' in name:
-                name = name.replace(" Italic", '')
+                name = name.replace(" Oblique", '')
                 self.italic_f.update({name: font})
             else:
                 try:
@@ -282,9 +287,99 @@ class ParseFont:
                 self.regular_f.update({name: font})
         log.debug("Font parsing is finished.")
 
+    @staticmethod
+    def _interpolate_contour(points, tags, segments=8):
+        """Convert a FreeType contour to line vertices by interpolating quadratic Bezier curves.
+
+        FreeType tags bit 0: 1 = on-curve, 0 = off-curve (quadratic control point).
+        TrueType rule: two consecutive off-curve points have an implied on-curve midpoint.
+
+        Args:
+            points: list of (x, y) from outline.points
+            tags: list of int from outline.tags
+            segments: line segments per Bezier curve (higher = smoother)
+        Returns:
+            list of (x, y) suitable for Polygon(), or empty list on failure
+        """
+        if len(points) < 2:
+            return []
+
+        result = []
+        n = len(points)
+
+        # Find the first on-curve point to start from, or compute implied midpoint
+        first_on = None
+        for k in range(n):
+            if tags[k] & 1:
+                first_on = k
+                break
+
+        if first_on is None:
+            # All off-curve: start from implied midpoint between last and first
+            start_pt = ((points[-1][0] + points[0][0]) / 2,
+                        (points[-1][1] + points[0][1]) / 2)
+            result.append(start_pt)
+            first_on = 0  # process from index 0
+        else:
+            result.append(points[first_on])
+            first_on = (first_on + 1) % n
+
+        # Walk all points starting after the first on-curve
+        i = first_on
+        visited = 0
+        while visited < n:
+            idx = i % n
+            visited += 1
+
+            if tags[idx] & 1:
+                # On-curve: straight line
+                result.append(points[idx])
+            else:
+                # Off-curve control point — start collecting Bezier sequence
+                p0 = result[-1]
+
+                while visited <= n:
+                    ctrl = points[idx]
+                    next_idx = (idx + 1) % n
+
+                    if visited >= n:
+                        # Wrap: endpoint is start of contour
+                        p2 = result[0]
+                    elif tags[next_idx] & 1:
+                        # Next is on-curve: endpoint
+                        p2 = points[next_idx]
+                        i = (idx + 1) % n
+                        visited += 1
+                    else:
+                        # Next is also off-curve: implied midpoint
+                        p2 = ((ctrl[0] + points[next_idx][0]) / 2,
+                              (ctrl[1] + points[next_idx][1]) / 2)
+
+                    # Interpolate quadratic Bezier: B(t) = (1-t)²·p0 + 2(1-t)t·ctrl + t²·p2
+                    for s in range(1, segments + 1):
+                        t = s / segments
+                        mt = 1 - t
+                        x = mt * mt * p0[0] + 2 * mt * t * ctrl[0] + t * t * p2[0]
+                        y = mt * mt * p0[1] + 2 * mt * t * ctrl[1] + t * t * p2[1]
+                        result.append((x, y))
+
+                    p0 = p2
+
+                    if visited >= n or (tags[next_idx] & 1):
+                        break
+                    idx = next_idx
+                    visited += 1
+
+            i = (i + 1) % n
+
+        # Close contour
+        if result and result[0] != result[-1]:
+            result.append(result[0])
+
+        return result
+
     def font_to_geometry(self, char_string, font_name, font_type, font_size, units='MM', coordx=0, coordy=0):
         path = []
-        scaled_path = []
         path_filename = ""
 
         regular_dict = self.regular_f
@@ -307,75 +402,84 @@ class ParseFont:
             return "flatcam font parse failed"
 
         face = ft.Face(path_filename)
-        face.set_char_size(int(font_size) * 64)
+        try:
+            face.set_char_size(int(round(float(font_size) * 64)))
 
-        pen_x = coordx
-        previous = 0
+            pen_x = coordx
+            previous = 0
 
-        # done as here: https://www.freetype.org/freetype2/docs/tutorial/step2.html
-        for char in char_string:
-            glyph_index = face.get_char_index(char)
+            # done as here: https://www.freetype.org/freetype2/docs/tutorial/step2.html
+            for char in char_string:
+                glyph_index = face.get_char_index(char)
 
-            try:
-                if previous > 0 and glyph_index > 0:
-                    delta = face.get_kerning(previous, glyph_index)
-                    pen_x += delta.x
-            except Exception:
-                pass
+                try:
+                    if previous > 0 and glyph_index > 0:
+                        delta = face.get_kerning(previous, glyph_index)
+                        pen_x += delta.x
+                except Exception:
+                    pass
 
-            face.load_glyph(glyph_index)
-            # face.load_char(char, flags=8)
+                face.load_glyph(glyph_index)
+                # face.load_char(char, flags=8)
 
-            slot = face.glyph
-            outline = slot.outline
+                slot = face.glyph
+                outline = slot.outline
 
-            start, end = 0, 0
-            for i in range(len(outline.contours)):
-                end = outline.contours[i]
-                points = outline.points[start:end + 1]
-                points.append(points[0])
+                start, end = 0, 0
+                for i in range(len(outline.contours)):
+                    end = outline.contours[i]
+                    points = outline.points[start:end + 1]
+                    tags = outline.tags[start:end + 1]
 
-                char_geo = Polygon(points)
-                char_geo = translate(char_geo, xoff=pen_x, yoff=coordy)
+                    interp_points = ParseFont._interpolate_contour(points, tags)
+                    if len(interp_points) >= 4:  # minimum 3 unique points + closing
+                        try:
+                            char_geo = Polygon(interp_points)
+                            if char_geo.is_valid and not char_geo.is_empty:
+                                char_geo = translate(char_geo, xoff=pen_x, yoff=coordy)
+                                path.append(char_geo)
+                        except Exception:
+                            # Fallback: use raw points as straight lines (original behavior)
+                            points_list = list(points)
+                            points_list.append(points_list[0])
+                            char_geo = Polygon(points_list)
+                            if not char_geo.is_empty:
+                                char_geo = translate(char_geo, xoff=pen_x, yoff=coordy)
+                                path.append(char_geo)
 
-                path.append(char_geo)
+                    start = end + 1
 
-                start = end + 1
+                pen_x += slot.advance.x
+                previous = glyph_index
+        finally:
+            del face
 
-            pen_x += slot.advance.x
-            previous = glyph_index
+        # --- Hole detection on unscaled geometry ---
+        n = len(path)
+        if n == 0:
+            return MultiPolygon()
 
-        for item in path:
-            if units == 'MM':
-                scaled_path.append(
-                    scale(
-                        item,
-                        0.0080187969924812,
-                        0.0080187969924812,
-                        origin=(coordx, coordy)
-                    )
-                )
+        if n == 1:
+            ret_geo = path[0]
+        else:
+            # Classify contours: a contour is a hole if it's contained within another
+            is_hole = [False] * n
+            for i in range(n):
+                for j in range(n):
+                    if i != j and path[i].within(path[j]):
+                        is_hole[i] = True
+                        break
+
+            shells = [path[i] for i in range(n) if not is_hole[i]]
+            holes = [path[i] for i in range(n) if is_hole[i]]
+
+            if holes:
+                ret_geo = unary_union(shells).difference(unary_union(holes))
             else:
-                scaled_path.append(
-                    scale(
-                        item,
-                        0.00031570066,
-                        0.00031570066,
-                        origin=(coordx, coordy)
-                    )
-                )
+                ret_geo = unary_union(shells)
 
-        # determine if some polygons are completely inside the other
-        interiors = []
-        for idx, poly in enumerate(scaled_path):
-            try:
-                if scaled_path[idx + 1].within(poly):
-                    interiors.append(scaled_path[idx + 1])
-            except IndexError:
-                break
-
-        ret_geo = MultiPolygon(
-            [x for x in scaled_path if x not in interiors]
-        ).difference(MultiPolygon(interiors))
+        # --- Single scale operation on final geometry ---
+        s = ParseFont.SCALE_MM if units == 'MM' else ParseFont.SCALE_INCH
+        ret_geo = scale(ret_geo, s, s, origin=(coordx, coordy))
 
         return ret_geo
