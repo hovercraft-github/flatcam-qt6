@@ -62,9 +62,22 @@ from appGUI.PlotCanvas import PlotCanvas
 from appGUI.PlotCanvas3d import PlotCanvas3d
 from appGUI.MainGUI import MainGUI
 from appGUI.VisPyVisuals import ShapeCollection
-from appGUI.GUIElements import FCMessageBox, FCInputSpinner, FCButton, DialogBoxRadio, FCTree, \
-    FCInputDoubleSpinner, FCFileSaveDialog, message_dialog, AppSystemTray, FCInputDialogSlider, \
-    GLay, FCLabel, DialogBoxChoice, VerticalScrollArea
+from appGUI.GUIElements import (
+    FCMessageBox,
+    FCInputSpinner,
+    FCButton,
+    DialogBoxRadio,
+    FCTree,
+    FCInputDoubleSpinner,
+    FCFileSaveDialog,
+    message_dialog,
+    AppSystemTray,
+    FCInputDialogSlider,
+    GLay,
+    FCLabel,
+    DialogBoxChoice,
+    VerticalScrollArea,
+)
 from appGUI.themes import dark_style_sheet, light_style_sheet
 
 # Various
@@ -86,8 +99,15 @@ from defaults import AppOptions
 # App Objects
 from appGUI.preferences.OptionsGroupUI import OptionsGroupUI
 from appGUI.preferences.PreferencesUIManager import PreferencesUIManager
-from appObjects.ObjectCollection import ObjectCollection, GerberObject, ExcellonObject, GeometryObject, \
-    CNCJobObject, ScriptObject, DocumentObject
+from appObjects.ObjectCollection import (
+    ObjectCollection,
+    GerberObject,
+    ExcellonObject,
+    GeometryObject,
+    CNCJobObject,
+    ScriptObject,
+    DocumentObject,
+)
 from appObjects.AppObject import AppObject
 
 # App Parsing files

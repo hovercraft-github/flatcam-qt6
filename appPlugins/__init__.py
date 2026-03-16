@@ -1,3 +1,4 @@
+
 from appPlugins.ToolCalculators import ToolCalculator
 
 from appPlugins.ToolDblSided import DblSidedTool
@@ -19,7 +20,7 @@ from appPlugins.ToolMove import ToolMove
 
 from appPlugins.ToolCutOut import CutOut
 from appPlugins.ToolNCC import NonCopperClear
-from appPlugins.ToolPaint import ToolPaint
+from appPlugins.ToolPaint.Paint import ToolPaint
 from appPlugins.ToolIsolation import ToolIsolation
 from appPlugins.ToolFollow import ToolFollow
 from appPlugins.ToolDrilling import ToolDrilling

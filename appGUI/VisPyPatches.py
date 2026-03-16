@@ -132,3 +132,24 @@ def apply_patches():
             return NotImplementedError
 
     Ticker._get_tick_frac_labels = _get_tick_frac_labels
+
+    # Patch CanvasBackendDesktop to suppress EventEmitter re-entrancy on rapid key input
+    _original_keyPressEvent = CanvasBackendDesktop.keyPressEvent
+    _original_keyReleaseEvent = CanvasBackendDesktop.keyReleaseEvent
+
+    def _safe_keyPressEvent(self, ev):
+        try:
+            _original_keyPressEvent(self, ev)
+        except RuntimeError as e:
+            if 'EventEmitter loop' not in str(e):
+                raise
+
+    def _safe_keyReleaseEvent(self, ev):
+        try:
+            _original_keyReleaseEvent(self, ev)
+        except RuntimeError as e:
+            if 'EventEmitter loop' not in str(e):
+                raise
+
+    CanvasBackendDesktop.keyPressEvent = _safe_keyPressEvent
+    CanvasBackendDesktop.keyReleaseEvent = _safe_keyReleaseEvent

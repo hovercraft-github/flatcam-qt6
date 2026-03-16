@@ -23,6 +23,8 @@ CHANGELOG for FlatCAM Evo beta
 - ToolMove: increased the performance of the move tool (and any offsets) by 10...20 % by using the new Shapely 2.0 vectorized operations
 - ParseFont: refactoring and optimization
 - ToolPaint: start the refactoring of the tool
+- ToolPaint: refactored into its own folder with MVC architecture
+- ToolPaint: fixed a bug where the signals could be connected multiple times at the same method
 
 15.02.2026
 
