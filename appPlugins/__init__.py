@@ -1,4 +1,10 @@
 
+try:
+    from appPlugins.ToolImage import ToolImage
+except ImportError as err:
+    # print(str(err))
+    pass
+
 from appPlugins.ToolCalculators import ToolCalculator
 
 from appPlugins.ToolDblSided import DblSidedTool
@@ -6,12 +12,6 @@ from appPlugins.ToolExtract import ToolExtract
 from appPlugins.ToolAlignObjects import AlignObjects
 
 from appPlugins.ToolFilm import Film
-
-try:
-    from appPlugins.ToolImage import ToolImage
-except ImportError as err:
-    # print(str(err))
-    pass
 
 from appPlugins.ToolDistance import Distance
 from appPlugins.ToolObjectDistance import ObjectDistance
@@ -31,7 +31,7 @@ from appPlugins.ToolOptimal import ToolOptimal
 
 from appPlugins.ToolPanelize import Panelize
 from appPlugins.ToolPcbWizard import PcbWizard
-from appPlugins.PDF_CONVERSION.ToolPDF import ToolPDF
+from appPlugins.ToolPdf.PdfImport import ToolPDF
 from appPlugins.ToolReport import ObjectReport
 
 from appPlugins.ToolQRCode import QRCode
