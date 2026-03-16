@@ -13,7 +13,6 @@ from vispy.color import Color
 from shapely import Polygon, LineString, LinearRing
 import threading
 import numpy as np
-from itertools import chain
 from appGUI.VisPyTesselators import GLUTess
 
 
@@ -89,12 +88,12 @@ def _update_shape_buffers(data, triangulation='glu'):
             # Use list multiplication (faster than list comprehension for uniform values)
             line_colors += [colo_rgba] * len(pts)
 
-    # Store buffers
-    data['line_pts'] = line_pts
-    data['line_colors'] = line_colors
-    data['mesh_vertices'] = mesh_vertices
-    data['mesh_tris'] = mesh_tris
-    data['mesh_colors'] = mesh_colors
+    # Store buffers as numpy arrays for faster concatenation in __update()
+    data['line_pts'] = np.array(line_pts, dtype=np.float32) if line_pts else np.empty((0, 2), dtype=np.float32)
+    data['line_colors'] = np.array(line_colors, dtype=np.float32) if line_colors else np.empty((0, 4), dtype=np.float32)
+    data['mesh_vertices'] = np.array(mesh_vertices, dtype=np.float32) if mesh_vertices else np.empty((0, 2), dtype=np.float32)
+    data['mesh_tris'] = np.array(mesh_tris, dtype=np.uint32) if mesh_tris else np.empty(0, dtype=np.uint32)
+    data['mesh_colors'] = np.array(mesh_colors, dtype=np.float32) if mesh_colors else np.empty((0, 4), dtype=np.float32)
 
     # Clear shapely geometry
     del data['geometry']
@@ -292,10 +291,10 @@ class ShapeCollectionVisual(CompoundVisual):
         CompoundVisual.__init__(self, visuals_, **kwargs)
 
         for m in self._meshes:
-            # Backface culling - now safe with CCW winding enforcement in tessellator
+            # Backface culling - safe with CCW winding enforcement in tessellator
             cull = True
             if self.fc_options:
-                cull = self.fc_options.get("global_backface_culling", False)
+                cull = self.fc_options.get("global_backface_culling", True)
             m.set_gl_state(polygon_offset_fill=True, polygon_offset=(1, 1), cull_face=cull)
 
         for lne in self._lines:
@@ -346,11 +345,11 @@ class ShapeCollectionVisual(CompoundVisual):
             'layer': layer,
             'tolerance': tolerance,
             # the following keys are updated in the _update_shape_buffers() method
-            'mesh_vertices': [],    # Vertices for mesh
-            'mesh_tris': [],        # Faces for mesh
-            'mesh_colors': [],      # Face colors
-            'line_pts': [],         # Vertices for line
-            'line_colors': []       # Line colors
+            'mesh_vertices': np.empty((0, 2), dtype=np.float32),    # Vertices for mesh
+            'mesh_tris': np.empty(0, dtype=np.uint32),              # Faces for mesh
+            'mesh_colors': np.empty((0, 4), dtype=np.float32),      # Face colors
+            'line_pts': np.empty((0, 2), dtype=np.float32),         # Vertices for line
+            'line_colors': np.empty((0, 4), dtype=np.float32)       # Line colors
         }
 
         if linewidth:
@@ -401,11 +400,11 @@ class ShapeCollectionVisual(CompoundVisual):
                 'visible': visible,
                 'layer': item.get('layer', layer),
                 'tolerance': item.get('tolerance', tolerance),
-                'mesh_vertices': [],
-                'mesh_tris': [],
-                'mesh_colors': [],
-                'line_pts': [],
-                'line_colors': []
+                'mesh_vertices': np.empty((0, 2), dtype=np.float32),
+                'mesh_tris': np.empty(0, dtype=np.uint32),
+                'mesh_colors': np.empty((0, 4), dtype=np.float32),
+                'line_pts': np.empty((0, 2), dtype=np.float32),
+                'line_colors': np.empty((0, 4), dtype=np.float32)
             }
             data_list.append(self.data[key])
         self.key_lock.release()
@@ -510,9 +509,9 @@ class ShapeCollectionVisual(CompoundVisual):
             else:
                 new_line_color = None
 
-        mesh_colors = [[] for _ in range(0, len(self._meshes))]     # Face colors
-        line_colors = [[] for _ in range(0, len(self._meshes))]     # Line colors
-        line_pts = [[] for _ in range(0, len(self._lines))]         # Vertices for line
+        mesh_colors_chunks = [[] for _ in range(len(self._meshes))]     # Face colors chunks
+        line_colors_chunks = [[] for _ in range(len(self._meshes))]     # Line colors chunks
+        line_pts_chunks = [[] for _ in range(len(self._lines))]         # Vertices for line chunks
 
         # Lock sub-visuals updates
         self.update_lock.acquire(True)
@@ -525,11 +524,11 @@ class ShapeCollectionVisual(CompoundVisual):
                         dim_mesh_tris = (len(data['mesh_tris']) // 3)
                         if dim_mesh_tris != 0:
                             try:
-                                mesh_colors[data['layer']] += [mesh_color_rgba] * dim_mesh_tris
+                                mesh_colors_chunks[data['layer']].append(np.tile(mesh_color_rgba, (dim_mesh_tris, 1)))
                                 self.data[k]['face_color'] = new_mesh_color
                                 # Invalidate cached rgba
                                 data['face_color_rgba'] = mesh_color_rgba
-                                data['mesh_colors'] = [mesh_color_rgba] * len(data['mesh_colors'])
+                                data['mesh_colors'] = np.tile(mesh_color_rgba, (len(data['mesh_colors']), 1))
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create mesh colors --> Data error. %s" % str(e))
@@ -538,12 +537,12 @@ class ShapeCollectionVisual(CompoundVisual):
                         dim_line_pts = (len(data['line_pts']))
                         if dim_line_pts != 0:
                             try:
-                                line_pts[data['layer']] += data['line_pts']
-                                line_colors[data['layer']] += [line_color_rgba] * dim_line_pts
+                                line_pts_chunks[data['layer']].append(data['line_pts'])
+                                line_colors_chunks[data['layer']].append(np.tile(line_color_rgba, (dim_line_pts, 1)))
                                 self.data[k]['color'] = new_line_color
                                 # Invalidate cached rgba
                                 data['color_rgba'] = line_color_rgba
-                                data['line_colors'] = [line_color_rgba] * len(data['line_colors'])
+                                data['line_colors'] = np.tile(line_color_rgba, (len(data['line_colors']), 1))
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create line colors --> Data error. %s" % str(e))
@@ -557,23 +556,23 @@ class ShapeCollectionVisual(CompoundVisual):
                         if new_mesh_color and new_mesh_color != '':
                             if dim_mesh_tris != 0:
                                 try:
-                                    mesh_colors[data['layer']] += [mesh_color_rgba] * dim_mesh_tris
+                                    mesh_colors_chunks[data['layer']].append(np.tile(mesh_color_rgba, (dim_mesh_tris, 1)))
                                     self.data[k]['face_color'] = new_mesh_color
                                     # Invalidate cached rgba
                                     data['face_color_rgba'] = mesh_color_rgba
-                                    data['mesh_colors'] = [mesh_color_rgba] * len(data['mesh_colors'])
+                                    data['mesh_colors'] = np.tile(mesh_color_rgba, (len(data['mesh_colors']), 1))
                                 except Exception as e:
                                     print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                           "Create mesh colors --> Data error. %s" % str(e))
                         if new_line_color and new_line_color != '':
                             if dim_line_pts != 0:
                                 try:
-                                    line_pts[data['layer']] += data['line_pts']
-                                    line_colors[data['layer']] += [line_color_rgba] * dim_line_pts
+                                    line_pts_chunks[data['layer']].append(data['line_pts'])
+                                    line_colors_chunks[data['layer']].append(np.tile(line_color_rgba, (dim_line_pts, 1)))
                                     self.data[k]['color'] = new_line_color
                                     # Invalidate cached rgba
                                     data['color_rgba'] = line_color_rgba
-                                    data['line_colors'] = [line_color_rgba] * len(data['line_colors'])
+                                    data['line_colors'] = np.tile(line_color_rgba, (len(data['line_colors']), 1))
                                 except Exception as e:
                                     print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                           "Create line colors --> Data error. %s" % str(e))
@@ -583,28 +582,33 @@ class ShapeCollectionVisual(CompoundVisual):
                                 # Use cached rgba value if available
                                 if 'face_color_rgba' not in data:
                                     data['face_color_rgba'] = Color(data['face_color']).rgba
-                                mesh_colors[data['layer']] += [data['face_color_rgba']] * dim_mesh_tris
+                                mesh_colors_chunks[data['layer']].append(np.tile(data['face_color_rgba'], (dim_mesh_tris, 1)))
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create mesh colors --> Data error. %s" % str(e))
 
                         if dim_line_pts != 0:
                             try:
-                                line_pts[data['layer']] += data['line_pts']
+                                line_pts_chunks[data['layer']].append(data['line_pts'])
                                 # Use cached rgba value if available
                                 if 'color_rgba' not in data:
                                     data['color_rgba'] = Color(data['color']).rgba
-                                line_colors[data['layer']] += [data['color_rgba']] * dim_line_pts
+                                line_colors_chunks[data['layer']].append(np.tile(data['color_rgba'], (dim_line_pts, 1)))
                             except Exception as e:
                                 print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
                                       "Create line colors --> Data error. %s" % str(e))
 
+        # Concatenate chunks for GPU upload
+        mesh_colors = [np.concatenate(c) if c else np.empty((0, 4), dtype=np.float32) for c in mesh_colors_chunks]
+        line_pts = [np.concatenate(c) if c else np.empty((0, 2), dtype=np.float32) for c in line_pts_chunks]
+        line_colors = [np.concatenate(c) if c else np.empty((0, 4), dtype=np.float32) for c in line_colors_chunks]
+
         # Updating meshes
         if new_mesh_color and new_mesh_color != '':
             for i, mesh in enumerate(self._meshes):
-                if mesh_colors[i]:
+                if len(mesh_colors[i]) > 0:
                     try:
-                        mesh._meshdata.set_face_colors(colors=np.asarray(mesh_colors[i]))
+                        mesh._meshdata.set_face_colors(colors=mesh_colors[i])
                         mesh.mesh_data_changed()
                     except Exception as e:
                         print("VisPyVisuals.ShapeCollectionVisual.update_color(). "
@@ -616,7 +620,7 @@ class ShapeCollectionVisual(CompoundVisual):
                 if len(line_pts[i]) > 0:
                     line.visible = True
                     try:
-                        line._color = np.asarray(line_colors[i])
+                        line._color = line_colors[i]
                         line._changed['color'] = True
                         line.update()
                     except Exception as e:
@@ -659,21 +663,24 @@ class ShapeCollectionVisual(CompoundVisual):
                 layer_line_pts_chunks[layer].append(data['line_pts'])
                 layer_line_colors_chunks[layer].append(data['line_colors'])
 
-                if data['mesh_tris'] and data['mesh_vertices']:
+                if len(data['mesh_tris']) > 0 and len(data['mesh_vertices']) > 0:
                     offset = layer_vert_counts[layer]
                     layer_mesh_tris_chunks[layer].append(
-                        [x + offset for x in data['mesh_tris']]
+                        data['mesh_tris'] + offset
                     )
                     layer_mesh_verts_chunks[layer].append(data['mesh_vertices'])
                     layer_mesh_colors_chunks[layer].append(data['mesh_colors'])
                     layer_vert_counts[layer] += len(data['mesh_vertices'])
 
-        # Phase 2: Single flatten per layer using itertools.chain (imported at module level)
-        line_pts = [list(chain.from_iterable(layer_line_pts_chunks[i])) for i in range(len(self._lines))]
-        line_colors = [list(chain.from_iterable(layer_line_colors_chunks[i])) for i in range(len(self._lines))]
-        mesh_vertices = [list(chain.from_iterable(layer_mesh_verts_chunks[i])) for i in range(len(self._meshes))]
-        mesh_tris = [list(chain.from_iterable(layer_mesh_tris_chunks[i])) for i in range(len(self._meshes))]
-        mesh_colors = [list(chain.from_iterable(layer_mesh_colors_chunks[i])) for i in range(len(self._meshes))]
+        # Phase 2: Single flatten per layer using np.concatenate
+        def _concat(chunks, empty_shape, dtype):
+            return np.concatenate(chunks) if chunks else np.empty(empty_shape, dtype=dtype)
+
+        line_pts = [_concat(layer_line_pts_chunks[i], (0, 2), np.float32) for i in range(len(self._lines))]
+        line_colors = [_concat(layer_line_colors_chunks[i], (0, 4), np.float32) for i in range(len(self._lines))]
+        mesh_vertices = [_concat(layer_mesh_verts_chunks[i], (0, 2), np.float32) for i in range(len(self._meshes))]
+        mesh_tris = [_concat(layer_mesh_tris_chunks[i], (0,), np.uint32) for i in range(len(self._meshes))]
+        mesh_colors = [_concat(layer_mesh_colors_chunks[i], (0, 4), np.float32) for i in range(len(self._meshes))]
 
         # Set GPU state once, outside the mesh loop (Step 1a optimization)
         set_state(polygon_offset_fill=False)
@@ -681,11 +688,10 @@ class ShapeCollectionVisual(CompoundVisual):
         # Updating meshes
         for i, mesh in enumerate(self._meshes):
             if len(mesh_vertices[i]) > 0:
-                faces_array = np.asarray(mesh_tris[i], dtype=np.uint32)
                 mesh.set_data(
-                    vertices=np.asarray(mesh_vertices[i]),
-                    faces=faces_array.reshape((-1, 3)),
-                    face_colors=np.asarray(mesh_colors[i])
+                    vertices=mesh_vertices[i],
+                    faces=mesh_tris[i].reshape((-1, 3)),
+                    face_colors=mesh_colors[i]
                 )
             else:
                 mesh.set_data()
@@ -697,8 +703,8 @@ class ShapeCollectionVisual(CompoundVisual):
             if len(line_pts[i]) > 0:
                 line.visible = True
                 line.set_data(
-                    pos=np.asarray(line_pts[i]),
-                    color=np.asarray(line_colors[i]),
+                    pos=line_pts[i],
+                    color=line_colors[i],
                     width=self._line_width,
                     connect='segments')
             else:

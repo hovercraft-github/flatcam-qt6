@@ -7,6 +7,7 @@
 # ##########################################################
 
 from OpenGL import GLU
+import numpy as np
 
 
 class GLUTess:
@@ -97,17 +98,23 @@ class GLUTess:
         GLU.gluDeleteTess(tess)
 
         # Enforce CCW winding order for OpenGL backface culling compatibility
-        # Process triangles in groups of 3 indices
-        for i in range(0, len(self.tris), 3):
-            i0, i1, i2 = self.tris[i], self.tris[i + 1], self.tris[i + 2]
-            # Get vertex coordinates
-            p0 = self.pts[i0]
-            p1 = self.pts[i1]
-            p2 = self.pts[i2]
-            # Cross product Z component of edges (p1-p0) x (p2-p0)
-            cross_z = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-            if cross_z < 0:
-                # Clockwise — swap to make CCW
-                self.tris[i + 1], self.tris[i + 2] = self.tris[i + 2], self.tris[i + 1]
+        # Vectorized numpy approach — process all triangles at once
+        if self.tris and self.pts:
+            pts = np.array(self.pts, dtype=np.float64)
+            tris = np.array(self.tris, dtype=np.uint32).reshape(-1, 3)
+
+            p0 = pts[tris[:, 0]]
+            p1 = pts[tris[:, 1]]
+            p2 = pts[tris[:, 2]]
+
+            # Cross product Z component: (p1-p0) x (p2-p0)
+            cross_z = (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1]) - \
+                      (p1[:, 1] - p0[:, 1]) * (p2[:, 0] - p0[:, 0])
+
+            # Swap indices for clockwise triangles to make them CCW
+            cw_mask = cross_z < 0
+            tris[cw_mask, 1], tris[cw_mask, 2] = tris[cw_mask, 2].copy(), tris[cw_mask, 1].copy()
+
+            self.tris = tris.ravel().tolist()
 
         return self.tris, self.pts

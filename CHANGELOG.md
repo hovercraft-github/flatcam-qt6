@@ -19,6 +19,7 @@ CHANGELOG for FlatCAM Evo beta
 - VisPyVisuals: big improvements in the performance of the plotting; in some cases the performance was improved by a factor of 3 to 5 times
 - implemented batch plotting for FlatCAM objects
 - VisPyVisuals: huge improvements in plotting speed on the 3d engine VisPy canvas
+- VisPyVisuals: another whooping ~30% performance boost in plotting / panning / zooming on top of the previous improvements by moving fully to numpy data structures
 
 15.02.2026
 
