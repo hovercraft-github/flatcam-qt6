@@ -1701,7 +1701,7 @@ class App(QtCore.QObject):
         self.cutout_tool.install(icon=QtGui.QIcon(self.resource_location + '/cut32.png'), pos=self.ui.menu_plugins,
                                  before=self.sub_tool.menuAction)
 
-        self.ncclear_tool = NonCopperClear(self)
+        self.ncclear_tool = ToolNcc(self)
         self.ncclear_tool.install(icon=QtGui.QIcon(self.resource_location + '/ncc32.png'), pos=self.ui.menu_plugins,
                                   before=self.sub_tool.menuAction, separator=True)
 

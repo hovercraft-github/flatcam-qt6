@@ -19,7 +19,7 @@ class TclCommandCopperClear(TclCommand):
     Clear the non-copper areas.
     """
 
-    # Array of all command aliases, to be able use old names for backward compatibility (add_poly, add_polygon)
+    # Array of all command aliases, to be able to use old names for backward compatibility (add_poly, add_polygon)
     aliases = ['ncc_clear', 'ncc']
 
     description = '%s %s' % ("--", "Clear excess copper.")
@@ -83,7 +83,7 @@ class TclCommandCopperClear(TclCommand):
 
         :param args: array of known named arguments and options
         :param unnamed_args: array of other values which were passed into command
-            without -somename and  we do not have them in known arg_names
+            without -somename, and  we do not have them in known arg_names
         :return: None or exception
         """
 
@@ -207,39 +207,41 @@ class TclCommandCopperClear(TclCommand):
         })
         ncc_tools = {}
 
-        tooluid = 0
+        tool_uid = 0
         for tool in tools:
-            tooluid += 1
+            tool_uid += 1
             ncc_tools.update({
-                int(tooluid): {
+                int(tool_uid): {
                     'tooldia':          float('%.*f' % (obj.decimals, tool)),
                     'data':             dict(default_data),
                     'solid_geometry':   []
                 }
             })
-            ncc_tools[int(tooluid)]['data']['tooldia'] = self.app.dec_format(tool, obj.decimals)
+            ncc_tools[int(tool_uid)]['data']['tooldia'] = self.app.dec_format(tool, obj.decimals)
 
         # Non-Copper clear all polygons in the non-copper clear object
         if select == 0:     # 'all' in args
-            self.app.ncclear_tool.clear_copper_tcl(ncc_obj=obj,
-                                                   select_method=0,     # ITSELF
-                                                   ncctooldia=tooldia,
-                                                   overlap=overlap,
-                                                   order=order,
-                                                   margin=margin,
-                                                   has_offset=has_offset,
-                                                   offset=offset,
-                                                   method=method_data,
-                                                   outname=outname,
-                                                   connect=connect,
-                                                   contour=contour,
-                                                   rest=rest,
-                                                   tools_storage=ncc_tools,
-                                                   plot=False,
-                                                   run_threaded=False)
+            self.app.ncclear_tool.gen.clear_copper_tcl(
+                ncc_obj=obj,
+                select_method=0,     # ITSELF
+                ncc_tooldia=tooldia,
+                overlap=overlap,
+                order=order,
+                margin=margin,
+                has_offset=has_offset,
+                offset=offset,
+                method=method_data,
+                outname=outname,
+                connect=connect,
+                contour=contour,
+                rest=rest,
+                tools_storage=ncc_tools,
+                plot=False,
+                run_threaded=False,
+            )
             return
 
-        # Non-Copper clear all polygons found within the box object from the the non_copper cleared object
+        # Non-Copper clear all polygons found within the box object from the non_copper cleared object
         if select == 2:   # Reference Object 'box' in args
             box_name = args['box']
 
@@ -252,26 +254,28 @@ class TclCommandCopperClear(TclCommand):
                 self.raise_tcl_error("%s: %s" % (_("Could not retrieve object"), name))
                 return "fail"
 
-            self.app.ncclear_tool.clear_copper_tcl(ncc_obj=obj,
-                                                   sel_obj=box_obj,
-                                                   select_method=2,     # REFERENCE OBJECT
-                                                   ncctooldia=tooldia,
-                                                   overlap=overlap,
-                                                   order=order,
-                                                   margin=margin,
-                                                   has_offset=has_offset,
-                                                   offset=offset,
-                                                   method=method_data,
-                                                   outname=outname,
-                                                   connect=connect,
-                                                   contour=contour,
-                                                   rest=rest,
-                                                   tools_storage=ncc_tools,
-                                                   plot=False,
-                                                   run_threaded=False)
+            self.app.ncclear_tool.gen.clear_copper_tcl(
+                ncc_obj=obj,
+                sel_obj=box_obj,
+                select_method=2,     # REFERENCE OBJECT
+                ncc_tooldia=tooldia,
+                overlap=overlap,
+                order=order,
+                margin=margin,
+                has_offset=has_offset,
+                offset=offset,
+                method=method_data,
+                outname=outname,
+                connect=connect,
+                contour=contour,
+                rest=rest,
+                tools_storage=ncc_tools,
+                plot=False,
+                run_threaded=False,
+            )
             return
 
-        # if the program reached this then it's an error because neither -all or -box <value> was used.
+        # if the program reached this then it's an error because neither -all nor -box <value> was used.
         self.app.log.error("Expected either -box <value> or -all. Copper clearing failed.")
         self.raise_tcl_error('%s' % _("Expected either -box <value> or -all."))
         return "fail"

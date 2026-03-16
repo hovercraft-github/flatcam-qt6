@@ -19,7 +19,7 @@ from appPlugins.ToolObjectDistance import ObjectDistance
 from appPlugins.ToolMove import ToolMove
 
 from appPlugins.ToolCutOut import CutOut
-from appPlugins.ToolNCC import NonCopperClear
+from appPlugins.ToolNCC.Ncc import ToolNcc
 from appPlugins.ToolPaint.Paint import ToolPaint
 from appPlugins.ToolIsolation import ToolIsolation
 from appPlugins.ToolFollow import ToolFollow

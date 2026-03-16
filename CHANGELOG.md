@@ -25,6 +25,7 @@ CHANGELOG for FlatCAM Evo beta
 - ToolPaint: start the refactoring of the tool
 - ToolPaint: refactored into its own folder with MVC architecture
 - ToolPaint: fixed a bug where the signals could be connected multiple times at the same method
+- ToolNCC: refactored into its own folder with MVC architecture
 
 15.02.2026
 
