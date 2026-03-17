@@ -1,6 +1,6 @@
 
-from PyQt6 import QtWidgets, QtCore, QtGui
-from PyQt6.QtCore import Qt
+from PyQt6 import QtWidgets, QtCore, QtGui      # noqa
+from PyQt6.QtCore import Qt     # noqa
 
 from appGUI.GUIElements import (
     FCLabel,
@@ -189,11 +189,11 @@ class PaintUI:
                                       "WARNING: using rest machining will automatically set the order\n"
                                       "in reverse and disable this control."))
 
-        self.paint_order_combo = FCComboBox2()
-        self.paint_order_combo.addItems([_('Default'), _('Forward'), _('Reverse')])
+        self.order_combo = FCComboBox2()
+        self.order_combo.addItems([_('Default'), _('Forward'), _('Reverse')])
 
         tool_grid.addWidget(self.order_label, 4, 0)
-        tool_grid.addWidget(self.paint_order_combo, 4, 1)
+        tool_grid.addWidget(self.order_combo, 4, 1)
 
         # ##############################################################################
         # ###################### ADD A NEW TOOL ########################################
@@ -300,15 +300,15 @@ class PaintUI:
               "Higher values = slow processing and slow execution on CNC\n"
               "due of too many paths.")
         )
-        self.paintoverlap_entry = FCDoubleSpinner(callback=self.confirmation_message, suffix='%')
-        self.paintoverlap_entry.set_precision(3)
-        self.paintoverlap_entry.setWrapping(True)
-        self.paintoverlap_entry.setRange(0.0000, 99.9999)
-        self.paintoverlap_entry.setSingleStep(0.1)
-        self.paintoverlap_entry.setObjectName('p_overlap')
+        self.overlap_entry = FCDoubleSpinner(callback=self.confirmation_message, suffix='%')
+        self.overlap_entry.set_precision(3)
+        self.overlap_entry.setWrapping(True)
+        self.overlap_entry.setRange(0.0000, 99.9999)
+        self.overlap_entry.setSingleStep(0.1)
+        self.overlap_entry.setObjectName('p_overlap')
 
         param_grid.addWidget(ovlabel, 0, 0)
-        param_grid.addWidget(self.paintoverlap_entry, 0, 1)
+        param_grid.addWidget(self.overlap_entry, 0, 1)
 
         # Offset
         self.offset_label = FCLabel('%s:' % _('Offset'))
@@ -338,35 +338,35 @@ class PaintUI:
               "in the order specified.")
         )
 
-        self.paintmethod_combo = FCComboBox2()
-        self.paintmethod_combo.addItems(
+        self.method_combo = FCComboBox2()
+        self.method_combo.addItems(
             [_("Standard"), _("Seed"), _("Lines"), _("Laser_lines"), _("Combo")]
         )
-        idx = self.paintmethod_combo.findText(_("Laser_lines"))
-        self.paintmethod_combo.model().item(idx).setEnabled(False)  # type: ignore[union-attr]
+        idx = self.method_combo.findText(_("Laser_lines"))
+        self.method_combo.model().item(idx).setEnabled(False)  # type: ignore[union-attr]
 
-        self.paintmethod_combo.setObjectName('p_method')
+        self.method_combo.setObjectName('p_method')
 
         param_grid.addWidget(methodlabel, 4, 0)
-        param_grid.addWidget(self.paintmethod_combo, 4, 1)
+        param_grid.addWidget(self.method_combo, 4, 1)
 
         # Connect lines
-        self.pathconnect_cb = FCCheckBox('%s' % _("Connect"))
-        self.pathconnect_cb.setObjectName('p_connect')
-        self.pathconnect_cb.setToolTip(
+        self.connect_cb = FCCheckBox('%s' % _("Connect"))
+        self.connect_cb.setObjectName('p_connect')
+        self.connect_cb.setToolTip(
             _("Draw lines between resulting\n"
               "segments to minimize tool lifts.")
         )
 
-        self.paintcontour_cb = FCCheckBox('%s' % _("Contour"))
-        self.paintcontour_cb.setObjectName('p_contour')
-        self.paintcontour_cb.setToolTip(
+        self.contour_cb = FCCheckBox('%s' % _("Contour"))
+        self.contour_cb.setObjectName('p_contour')
+        self.contour_cb.setToolTip(
             _("Cut around the perimeter of the polygon\n"
               "to trim rough edges.")
         )
 
-        param_grid.addWidget(self.pathconnect_cb, 6, 0)
-        param_grid.addWidget(self.paintcontour_cb, 6, 1)
+        param_grid.addWidget(self.connect_cb, 6, 0)
+        param_grid.addWidget(self.contour_cb, 6, 1)
 
         # #############################################################################################################
         # Apply All Parameters Button
@@ -429,14 +429,14 @@ class PaintUI:
               "- 'Reference Object' - will process the area specified by another object.")
         )
 
-        self.selectmethod_combo = FCComboBox2()
-        self.selectmethod_combo.addItems(
+        self.select_method_combo = FCComboBox2()
+        self.select_method_combo.addItems(
             [_("All"), _("Polygon Selection"), _("Area Selection"), _("Reference Object")]
         )
-        self.selectmethod_combo.setObjectName('p_selection')
+        self.select_method_combo.setObjectName('p_selection')
 
         gen_grid.addWidget(selectlabel, 4, 0)
-        gen_grid.addWidget(self.selectmethod_combo, 4, 1)
+        gen_grid.addWidget(self.select_method_combo, 4, 1)
 
         # Type of Reference Object
         self.reference_type_label = FCLabel('%s:' % _("Type"))
@@ -481,13 +481,12 @@ class PaintUI:
 
         # #############################################################################################################
         # Generate Paint Geometry Button
-        # #############################################################################################################
-        self.generate_paint_button = FCButton(_('Generate Geometry'), bold=True)
-        self.generate_paint_button.setIcon(QtGui.QIcon(self.app.resource_location + '/geometry32.png'))
-        self.generate_paint_button.setToolTip(
+        self.generate_button = FCButton(_('Generate Geometry'), bold=True)
+        self.generate_button.setIcon(QtGui.QIcon(self.app.resource_location + '/geometry32.png'))
+        self.generate_button.setToolTip(
             _("Create a Geometry Object which paints the polygons.")
         )
-        self.tools_box.addWidget(self.generate_paint_button)
+        self.tools_box.addWidget(self.generate_button)
 
         self.tools_box.addStretch(1)
 
@@ -504,9 +503,9 @@ class PaintUI:
 
     def on_rest_machining_check(self, state):
         if state:
-            self.paint_order_combo.set_value(2)     # Reverse
+            self.order_combo.set_value(2)     # Reverse
             self.order_label.setDisabled(True)
-            self.paint_order_combo.setDisabled(True)
+            self.order_combo.setDisabled(True)
 
             self.offset_label.hide()
             self.offset_entry.hide()
@@ -514,7 +513,7 @@ class PaintUI:
             self.rest_offset_entry.show()
         else:
             self.order_label.setDisabled(False)
-            self.paint_order_combo.setDisabled(False)
+            self.order_combo.setDisabled(False)
 
             self.offset_label.show()
             self.offset_entry.show()
@@ -522,7 +521,7 @@ class PaintUI:
             self.rest_offset_entry.hide()
 
     def on_selection(self):
-        sel_combo = self.selectmethod_combo.get_value()
+        sel_combo = self.select_method_combo.get_value()
 
         if sel_combo == 3:  # _("Reference Object")
             self.reference_combo.show()

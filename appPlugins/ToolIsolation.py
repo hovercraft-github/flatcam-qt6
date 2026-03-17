@@ -1130,15 +1130,17 @@ class ToolIsolation(Gerber, AppTool):
         for ap in list(aperture_storage.keys()):
             if 'geometry' in aperture_storage[ap]:
                 for geo_el in aperture_storage[ap]['geometry']:
-                    if 'solid' in geo_el and geo_el['solid'] is not None and geo_el['solid'].is_valid:
-                        total_geo.append(geo_el['solid'])
+                    if 'solid' in geo_el and geo_el['solid'] is not None:
+                        buff_geo = geo_el['solid'].buffer(0.0000001)
+                        if buff_geo.is_valid:
+                            total_geo.append(buff_geo)
 
-        total_geo = MultiPolygon(total_geo)
-        total_geo = total_geo.buffer(0)
+        total_geo = unary_union(total_geo)
+        total_geo = flatten_shapely_geometry(total_geo)
 
-        if isinstance(total_geo, Polygon):
-            msg = ('[ERROR_NOTCL] %s' % _("The Gerber object has one Polygon as geometry.\n"
-                                          "There are no distances between geometry elements to be found."))
+        if len(total_geo) <= 1:
+            msg = ('[ERROR_NOTCL] %s' % _("Too few polygons in the Gerber object to determine distances."))
+            return msg, np.inf
 
         min_dict = {}
         idx = 1
@@ -1171,27 +1173,47 @@ class ToolIsolation(Gerber, AppTool):
 
     # multiprocessing variant
     def find_safe_tooldia_multiprocessing(self):
-        self.app.inform.emit(_("Checking tools for validity."))
+        tools_available = self.ui.tools_table.rowCount()
+        if tools_available == 0:
+            self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools in the Tool Table.")}')
+            return
+        if tools_available > 1:
+            sel_table_items = self.ui.tools_table.selectedItems()
+            if not sel_table_items:
+                self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools selected in the Tool Table.")}')
+                return
+            sel_rows = {t.row() for t in sel_table_items}
+            if not sel_rows:
+                self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools selected in the Tool Table.")}')
+                return
+        else:
+            sel_rows = {0}
+
         self.units = self.app.app_units.upper()
 
-        obj_name = self.ui.object_combo.currentText()
-
         # Get source object.
+        obj_name = self.ui.object_combo.currentText()
         try:
             fcobj = self.app.collection.get_by_name(obj_name)
+            if fcobj is None:
+                self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Object not found"), str(obj_name)))
+                return
         except Exception:
             self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Could not retrieve object"), str(obj_name)))
             return
 
-        if fcobj is None:
-            self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Object not found"), str(obj_name)))
-            return
+        self.app.inform.emit(_("Checking tools for validity."))
+
+        # find the selected tool ID's
+        sorted_tools = []
+        for row in sel_rows:
+            tid = int(self.ui.tools_table.item(row, 3).text())
+            sorted_tools.append(tid)
 
         def job_thread(app_obj):
             with self.app.proc_container.new(_("Checking ...")):
 
                 ap_storage = fcobj.tools
-
                 p = app_obj.pool.apply_async(self.find_optim_mp, args=(ap_storage, self.decimals))
                 res = p.get()
 
@@ -1200,36 +1222,39 @@ class ToolIsolation(Gerber, AppTool):
                     return 'fail'
 
                 min_dist = res[1]
-                min_dist_truncated = self.app.dec_format(float(min_dist), self.decimals)
-                self.safe_tooldia = min_dist_truncated
 
-                if self.safe_tooldia:
-                    # find the selected tool ID's
-                    sorted_tools = []
-                    table_items = self.ui.tools_table.selectedItems()
-                    sel_rows = {t.row() for t in table_items}
-                    for row in sel_rows:
-                        tid = int(self.ui.tools_table.item(row, 3).text())
-                        sorted_tools.append(tid)
+                try:
+                    min_dist_truncated = self.app.dec_format(float(min_dist), self.decimals)
+                    self.safe_tooldia = min_dist_truncated
+
                     if not sorted_tools:
                         msg = _("There are no tools selected in the Tool Table.")
                         self.app.inform.emit('[ERROR_NOTCL] %s' % msg)
+                        return 'fail'
+
+                    if not self.safe_tooldia:
+                        msg = _("Could not find a safe tool diameter.")
+                        self.app.log.error(msg)
+                        self.app.inform.emit(f'[ERROR_NOTCL] {_("Failed.")}')
                         return 'fail'
 
                     # check if the tools diameters are less then the safe tool diameter
                     for tool in sorted_tools:
                         tool_dia = float(self.iso_tools[tool]['tooldia'])
                         if tool_dia > self.safe_tooldia:
-                            msg = _("Incomplete isolation. "
-                                    "At least one tool could not do a complete isolation.")
-                            self.app.inform.emit('[WARNING] %s' % msg)
+                            msg = _("Incomplete isolation. At least one tool could not do a complete isolation.")
+                            self.app.log.warning(msg)
+                            self.app.inform.emit(f'[WARNING] {_("Incomplete isolation.")}')
                             # reset the value to prepare for another isolation
                             self.safe_tooldia = None
                             self.validation_status = False
                             return
+                except Exception as e:
+                    self.app.log.error(str(e))
+                    return 'fail'
 
-                    # reset the value to prepare for another isolation
-                    self.safe_tooldia = None
+                # reset the value to prepare for another isolation
+                self.safe_tooldia = None
                 self.app.inform.emit("Tool validation passed.")
 
         self.app.worker_task.emit({'fcn': job_thread, 'params': [self.app]})

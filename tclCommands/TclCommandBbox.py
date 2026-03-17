@@ -17,7 +17,7 @@ class TclCommandBbox(TclCommand):
     Tcl shell command to follow a Gerber file
     """
 
-    # array of all command aliases, to be able use  old names for backward compatibility (add_poly, add_polygon)
+    # array of all command aliases, to be able to use  old names for backward compatibility (add_poly, add_polygon)
     aliases = ['bounding_box', 'bbox']
 
     description = '%s %s' % ("--", "Creates a rectangular Geometry object that surrounds the object.")

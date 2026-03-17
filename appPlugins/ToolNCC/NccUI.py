@@ -1,4 +1,5 @@
-from PyQt6 import QtWidgets, QtCore, QtGui
+
+from PyQt6 import QtWidgets, QtCore, QtGui      # noqa
 
 from appGUI.GUIElements import (
     FCLabel,
@@ -105,12 +106,12 @@ class NccUI:
         # #############################################################################################################
         # The object to be copper cleared
         # #############################################################################################################
-        self.object_combo = FCComboBox()
-        self.object_combo.setModel(self.app.collection)
-        self.object_combo.setRootModelIndex(self.app.collection.index(0, 0, QtCore.QModelIndex()))
-        self.object_combo.is_last = True
+        self.obj_combo = FCComboBox()
+        self.obj_combo.setModel(self.app.collection)
+        self.obj_combo.setRootModelIndex(self.app.collection.index(0, 0, QtCore.QModelIndex()))
+        self.obj_combo.is_last = True
 
-        obj_grid.addWidget(self.object_combo, 2, 0, 1, 2)
+        obj_grid.addWidget(self.obj_combo, 2, 0, 1, 2)
 
         # separator_line = QtWidgets.QFrame()
         # separator_line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
@@ -175,14 +176,14 @@ class NccUI:
                                           "WARNING: using rest machining will automatically set the order\n"
                                           "in reverse and disable this control."))
 
-        # self.ncc_order_combo = RadioSet([{'label': _('No'), 'value': 'no'},
+        # self.order_combo = RadioSet([{'label': _('No'), 'value': 'no'},
         #                              {'label': _('Forward'), 'value': 'fwd'},
         #                              {'label': _('Reverse'), 'value': 'rev'}])
-        self.ncc_order_combo = FCComboBox2()
-        self.ncc_order_combo.addItems([_('Default'), _('Forward'), _('Reverse')])
+        self.order_combo = FCComboBox2()
+        self.order_combo.addItems([_('Default'), _('Forward'), _('Reverse')])
 
-        tool_grid.addWidget(self.ncc_order_label, 4, 0)
-        tool_grid.addWidget(self.ncc_order_combo, 4, 1)
+        tool_grid.addWidget(self.order_label, 4, 0)
+        tool_grid.addWidget(self.order_combo, 4, 1)
 
         # ##############################################################################
         # ###################### ADD A NEW TOOL ########################################
@@ -335,8 +336,8 @@ class NccUI:
         par_grid.addWidget(self.milling_type_radio, 2, 1)
 
         # Overlap Entry
-        self.nccoverlabel = FCLabel('%s:' % _('Overlap'))
-        self.nccoverlabel.setToolTip(
+        self.overlap_label = FCLabel('%s:' % _('Overlap'))
+        self.overlap_label.setToolTip(
             _("How much (percentage) of the tool width to overlap each tool pass.\n"
               "Adjust the value starting with lower values\n"
               "and increasing it if areas that should be processed are still \n"
@@ -345,99 +346,99 @@ class NccUI:
               "Higher values = slow processing and slow execution on CNC\n"
               "due of too many paths.")
         )
-        self.ncc_overlap_entry = FCDoubleSpinner(callback=self.confirmation_message, suffix='%')
-        self.ncc_overlap_entry.set_precision(self.decimals)
-        self.ncc_overlap_entry.setWrapping(True)
-        self.ncc_overlap_entry.setRange(0.000, 99.9999)
-        self.ncc_overlap_entry.setSingleStep(0.1)
-        self.ncc_overlap_entry.setObjectName("n_overlap")
+        self.overlap_entry = FCDoubleSpinner(callback=self.confirmation_message, suffix='%')
+        self.overlap_entry.set_precision(self.decimals)
+        self.overlap_entry.setWrapping(True)
+        self.overlap_entry.setRange(0.000, 99.9999)
+        self.overlap_entry.setSingleStep(0.1)
+        self.overlap_entry.setObjectName("n_overlap")
 
-        par_grid.addWidget(self.nccoverlabel, 4, 0)
-        par_grid.addWidget(self.ncc_overlap_entry, 4, 1)
+        par_grid.addWidget(self.overlap_label, 4, 0)
+        par_grid.addWidget(self.overlap_entry, 4, 1)
 
         # Method
-        self.methodlabel = FCLabel('%s:' % _('Method'))
-        self.methodlabel.setToolTip(
+        self.method_label = FCLabel('%s:' % _('Method'))
+        self.method_label.setToolTip(
             _("Algorithm for copper clearing:\n"
               "- Standard: Fixed step inwards.\n"
               "- Seed-based: Outwards from seed.\n"
               "- Line-based: Parallel lines.")
         )
-        # self.ncc_method_radio = RadioSet([
+        # self.method_radio = RadioSet([
         #     {"label": _("Standard"), "value": "standard"},
         #     {"label": _("Seed-based"), "value": "seed"},
         #     {"label": _("Straight lines"), "value": "lines"}
         # ], orientation='vertical', compact=True)
 
-        self.ncc_method_combo = FCComboBox2()
-        self.ncc_method_combo.addItems(
+        self.method_combo = FCComboBox2()
+        self.method_combo.addItems(
             [_("Standard"), _("Seed"), _("Lines"), _("Combo")]
         )
-        self.ncc_method_combo.setObjectName("n_method")
+        self.method_combo.setObjectName("n_method")
 
-        par_grid.addWidget(self.methodlabel, 6, 0)
-        par_grid.addWidget(self.ncc_method_combo, 6, 1)
+        par_grid.addWidget(self.method_label, 6, 0)
+        par_grid.addWidget(self.method_combo, 6, 1)
 
         # Margin
-        self.nccmarginlabel = FCLabel('%s:' % _('Margin'))
-        self.nccmarginlabel.setToolTip(
+        self.margin_label = FCLabel('%s:' % _('Margin'))
+        self.margin_label.setToolTip(
             _("Bounding box margin.")
         )
-        self.ncc_margin_entry = FCDoubleSpinner(callback=self.confirmation_message)
-        self.ncc_margin_entry.set_precision(self.decimals)
-        self.ncc_margin_entry.set_range(-10000.0000, 10000.0000)
-        self.ncc_margin_entry.setObjectName("n_margin")
+        self.margin_entry = FCDoubleSpinner(callback=self.confirmation_message)
+        self.margin_entry.set_precision(self.decimals)
+        self.margin_entry.set_range(-10000.0000, 10000.0000)
+        self.margin_entry.setObjectName("n_margin")
 
-        par_grid.addWidget(self.nccmarginlabel, 8, 0)
-        par_grid.addWidget(self.ncc_margin_entry, 8, 1)
+        par_grid.addWidget(self.margin_label, 8, 0)
+        par_grid.addWidget(self.margin_entry, 8, 1)
 
         # Connect lines
-        self.ncc_connect_cb = FCCheckBox('%s' % _("Connect"))
-        self.ncc_connect_cb.setObjectName("n_connect")
+        self.connect_cb = FCCheckBox('%s' % _("Connect"))
+        self.connect_cb.setObjectName("n_connect")
 
-        self.ncc_connect_cb.setToolTip(
+        self.connect_cb.setToolTip(
             _("Draw lines between resulting\n"
               "segments to minimize tool lifts.")
         )
-        par_grid.addWidget(self.ncc_connect_cb, 10, 0)
+        par_grid.addWidget(self.connect_cb, 10, 0)
 
         # Contour
-        self.ncc_contour_cb = FCCheckBox('%s' % _("Contour"))
-        self.ncc_contour_cb.setObjectName("n_contour")
+        self.contour_cb = FCCheckBox('%s' % _("Contour"))
+        self.contour_cb.setObjectName("n_contour")
 
-        self.ncc_contour_cb.setToolTip(
+        self.contour_cb.setToolTip(
             _("Cut around the perimeter of the polygon\n"
               "to trim rough edges.")
         )
-        par_grid.addWidget(self.ncc_contour_cb, 10, 1)
+        par_grid.addWidget(self.contour_cb, 10, 1)
 
-        # ## NCC Offset choice
-        self.ncc_choice_offset_cb = FCCheckBox('%s' % _("Offset"))
-        self.ncc_choice_offset_cb.setObjectName("n_offset")
+        # ## Offset choice
+        self.offset_choice_cb = FCCheckBox('%s' % _("Offset"))
+        self.offset_choice_cb.setObjectName("n_offset")
 
-        self.ncc_choice_offset_cb.setToolTip(
+        self.offset_choice_cb.setToolTip(
             _("If used, it will add an offset to the copper features.\n"
               "The copper clearing will finish to a distance\n"
               "from the copper features.")
         )
-        par_grid.addWidget(self.ncc_choice_offset_cb, 12, 0)
+        par_grid.addWidget(self.offset_choice_cb, 12, 0)
 
-        # ## NCC Offset Entry
-        self.ncc_offset_spinner = FCDoubleSpinner(callback=self.confirmation_message)
-        self.ncc_offset_spinner.set_range(0.00, 10.00)
-        self.ncc_offset_spinner.set_precision(4)
-        self.ncc_offset_spinner.setWrapping(True)
-        self.ncc_offset_spinner.setObjectName("n_offset_value")
+        # ## Offset Entry
+        self.offset_entry = FCDoubleSpinner(callback=self.confirmation_message)
+        self.offset_entry.set_range(0.00, 10.00)
+        self.offset_entry.set_precision(4)
+        self.offset_entry.setWrapping(True)
+        self.offset_entry.setObjectName("n_offset_value")
 
         units = self.app.app_units.upper()
         if units == 'MM':
-            self.ncc_offset_spinner.setSingleStep(0.1)
+            self.offset_entry.setSingleStep(0.1)
         else:
-            self.ncc_offset_spinner.setSingleStep(0.01)
+            self.offset_entry.setSingleStep(0.01)
 
-        par_grid.addWidget(self.ncc_offset_spinner, 12, 1)
+        par_grid.addWidget(self.offset_entry, 12, 1)
 
-        self.ois_ncc_offset = OptionalInputSection(self.ncc_choice_offset_cb, [self.ncc_offset_spinner])
+        self.ois_offset = OptionalInputSection(self.offset_choice_cb, [self.offset_entry])
 
         # #############################################################################################################
         # Apply All Parameters Button
@@ -467,10 +468,10 @@ class NccUI:
         gp_frame.setLayout(gen_grid)
 
         # Rest Machining
-        self.ncc_rest_cb = FCCheckBox('%s' % _("Rest Machining"))
-        self.ncc_rest_cb.setObjectName("n_rest_machining")
+        self.rest_cb = FCCheckBox('%s' % _("Rest Machining"))
+        self.rest_cb.setObjectName("n_rest_machining")
 
-        self.ncc_rest_cb.setToolTip(
+        self.rest_cb.setToolTip(
             "%s\n%s" % (
                 _("If checked, use 'rest machining'.\n"
                   "Copper features will be processed starting with the biggest selected tool.\n"
@@ -480,90 +481,90 @@ class NccUI:
             )
         )
 
-        gen_grid.addWidget(self.ncc_rest_cb, 0, 0, 1, 2)
+        gen_grid.addWidget(self.rest_cb, 0, 0, 1, 2)
 
         # Rest Margin
-        self.rest_nccmarginlabel = FCLabel('%s:' % _('Margin'))
-        self.rest_nccmarginlabel.setToolTip(
+        self.rest_margin_label = FCLabel('%s:' % _('Margin'))
+        self.rest_margin_label.setToolTip(
             _("Bounding box margin.")
         )
-        self.rest_ncc_margin_entry = FCDoubleSpinner(callback=self.confirmation_message)
-        self.rest_ncc_margin_entry.set_precision(self.decimals)
-        self.rest_ncc_margin_entry.set_range(-10000.0000, 10000.0000)
-        self.rest_ncc_margin_entry.setObjectName("n_margin")
+        self.rest_margin_entry = FCDoubleSpinner(callback=self.confirmation_message)
+        self.rest_margin_entry.set_precision(self.decimals)
+        self.rest_margin_entry.set_range(-10000.0000, 10000.0000)
+        self.rest_margin_entry.setObjectName("n_margin")
 
-        gen_grid.addWidget(self.rest_nccmarginlabel, 2, 0)
-        gen_grid.addWidget(self.rest_ncc_margin_entry, 2, 1)
+        gen_grid.addWidget(self.rest_margin_label, 2, 0)
+        gen_grid.addWidget(self.rest_margin_entry, 2, 1)
 
         # Rest Connect lines
-        self.rest_ncc_connect_cb = FCCheckBox('%s' % _("Connect"))
-        self.rest_ncc_connect_cb.setToolTip(
+        self.rest_connect_cb = FCCheckBox('%s' % _("Connect"))
+        self.rest_connect_cb.setToolTip(
             _("Draw lines between resulting\n"
               "segments to minimize tool lifts.")
         )
-        gen_grid.addWidget(self.rest_ncc_connect_cb, 4, 0)
+        gen_grid.addWidget(self.rest_connect_cb, 4, 0)
 
         # Rest Contour
-        self.rest_ncc_contour_cb = FCCheckBox('%s' % _("Contour"))
-        self.rest_ncc_contour_cb.setToolTip(
+        self.rest_contour_cb = FCCheckBox('%s' % _("Contour"))
+        self.rest_contour_cb.setToolTip(
             _("Cut around the perimeter of the polygon\n"
               "to trim rough edges.")
         )
-        gen_grid.addWidget(self.rest_ncc_contour_cb, 4, 1)
+        gen_grid.addWidget(self.rest_contour_cb, 4, 1)
 
-        # ## Rest NCC Offset choice
-        self.rest_ncc_choice_offset_cb = FCCheckBox('%s' % _("Offset"))
-        self.rest_ncc_choice_offset_cb.setToolTip(
+        # ## Rest Offset choice
+        self.rest_offset_choice_cb = FCCheckBox('%s' % _("Offset"))
+        self.rest_offset_choice_cb.setToolTip(
             _("If used, it will add an offset to the copper features.\n"
               "The copper clearing will finish to a distance\n"
               "from the copper features.")
         )
-        gen_grid.addWidget(self.rest_ncc_choice_offset_cb, 6, 0)
+        gen_grid.addWidget(self.rest_offset_choice_cb, 6, 0)
 
-        # ## Rest NCC Offset Entry
-        self.rest_ncc_offset_spinner = FCDoubleSpinner(callback=self.confirmation_message)
-        self.rest_ncc_offset_spinner.set_range(0.00, 10.00)
-        self.rest_ncc_offset_spinner.set_precision(4)
-        self.rest_ncc_offset_spinner.setWrapping(True)
+        # ## Rest Offset Entry
+        self.rest_offset_entry = FCDoubleSpinner(callback=self.confirmation_message)
+        self.rest_offset_entry.set_range(0.00, 10.00)
+        self.rest_offset_entry.set_precision(4)
+        self.rest_offset_entry.setWrapping(True)
 
         units = self.app.app_units.upper()
         if units == 'MM':
-            self.rest_ncc_offset_spinner.setSingleStep(0.1)
+            self.rest_offset_entry.setSingleStep(0.1)
         else:
-            self.rest_ncc_offset_spinner.setSingleStep(0.01)
+            self.rest_offset_entry.setSingleStep(0.01)
 
-        gen_grid.addWidget(self.rest_ncc_offset_spinner, 6, 1)
+        gen_grid.addWidget(self.rest_offset_entry, 6, 1)
 
-        self.rest_ois_ncc_offset = OptionalInputSection(self.rest_ncc_choice_offset_cb, [self.rest_ncc_offset_spinner])
+        self.rest_ois_offset = OptionalInputSection(self.rest_offset_choice_cb, [self.rest_offset_entry])
 
         # Reference Selection Combo
-        self.select_combo = FCComboBox2()
-        self.select_combo.addItems(
+        self.select_method_combo = FCComboBox2()
+        self.select_method_combo.addItems(
             [_("Itself"), _("Area Selection"), _("Reference Object")]
         )
-        self.select_combo.setObjectName("n_selection")
+        self.select_method_combo.setObjectName("n_selection")
 
-        self.select_label = FCLabel('%s:' % _("Selection"))
-        self.select_label.setToolTip(
+        self.select_method_label = FCLabel('%s:' % _("Selection"))
+        self.select_method_label.setToolTip(
             _("Selection of area to be processed.\n"
               "- 'Itself' - the processing extent is based on the object that is processed.\n "
               "- 'Area Selection' - left mouse click to start selection of the area to be processed.\n"
               "- 'Reference Object' - will process the area specified by another object.")
         )
-        gen_grid.addWidget(self.select_label, 8, 0)
-        gen_grid.addWidget(self.select_combo, 8, 1)
+        gen_grid.addWidget(self.select_method_label, 8, 0)
+        gen_grid.addWidget(self.select_method_combo, 8, 1)
 
         # Reference Type
-        self.reference_combo_type_label = FCLabel('%s:' % _("Type"))
-        self.reference_combo_type_label.setToolTip(
+        self.reference_type_label = FCLabel('%s:' % _("Type"))
+        self.reference_type_label.setToolTip(
             _("The type of FlatCAM object to be used as non copper clearing reference.\n"
               "It can be Gerber, Excellon or Geometry.")
         )
-        self.reference_combo_type = FCComboBox2()
-        self.reference_combo_type.addItems([_("Gerber"), _("Excellon"), _("Geometry")])
+        self.reference_type_combo = FCComboBox2()
+        self.reference_type_combo.addItems([_("Gerber"), _("Excellon"), _("Geometry")])
 
-        gen_grid.addWidget(self.reference_combo_type_label, 10, 0)
-        gen_grid.addWidget(self.reference_combo_type, 10, 1)
+        gen_grid.addWidget(self.reference_type_label, 10, 0)
+        gen_grid.addWidget(self.reference_type_combo, 10, 1)
 
         self.reference_combo = FCComboBox()
         self.reference_combo.setModel(self.app.collection)
@@ -573,8 +574,8 @@ class NccUI:
         gen_grid.addWidget(self.reference_combo, 12, 0, 1, 2)
 
         self.reference_combo.hide()
-        self.reference_combo_type.hide()
-        self.reference_combo_type_label.hide()
+        self.reference_type_combo.hide()
+        self.reference_type_label.hide()
 
         # Area Selection shape
         self.area_shape_label = FCLabel('%s:' % _("Shape"))
@@ -605,14 +606,13 @@ class NccUI:
 
         # #############################################################################################################
         # Generate NCC Geometry Button
-        # #############################################################################################################
-        self.generate_ncc_button = FCButton(_('Generate Geometry'), bold=True)
-        self.generate_ncc_button.setIcon(QtGui.QIcon(self.app.resource_location + '/geometry32.png'))
-        self.generate_ncc_button.setToolTip(
+        self.generate_button = FCButton(_('Generate Geometry'), bold=True)
+        self.generate_button.setIcon(QtGui.QIcon(self.app.resource_location + '/geometry32.png'))
+        self.generate_button.setToolTip(
             _("Create the Geometry Object\n"
               "for non-copper routing.")
         )
-        self.tools_box.addWidget(self.generate_ncc_button)
+        self.tools_box.addWidget(self.generate_button)
 
         self.tools_box.addStretch(1)
 
@@ -631,100 +631,100 @@ class NccUI:
             self.milling_type_label.setEnabled(True)
             self.milling_type_radio.setEnabled(True)
 
-            self.nccoverlabel.setEnabled(False)
-            self.ncc_overlap_entry.setEnabled(False)
-            self.methodlabel.setEnabled(False)
-            self.ncc_method_combo.setEnabled(False)
-            self.nccmarginlabel.setEnabled(False)
-            self.ncc_margin_entry.setEnabled(False)
-            self.ncc_connect_cb.setEnabled(False)
-            self.ncc_contour_cb.setEnabled(False)
-            self.ncc_choice_offset_cb.setEnabled(False)
-            self.ncc_offset_spinner.setEnabled(False)
+            self.overlap_label.setEnabled(False)
+            self.overlap_entry.setEnabled(False)
+            self.method_label.setEnabled(False)
+            self.method_combo.setEnabled(False)
+            self.margin_label.setEnabled(False)
+            self.margin_entry.setEnabled(False)
+            self.connect_cb.setEnabled(False)
+            self.contour_cb.setEnabled(False)
+            self.offset_choice_cb.setEnabled(False)
+            self.offset_entry.setEnabled(False)
         else:
             self.milling_type_label.setEnabled(False)
             self.milling_type_radio.setEnabled(False)
 
-            self.nccoverlabel.setEnabled(True)
-            self.ncc_overlap_entry.setEnabled(True)
-            self.methodlabel.setEnabled(True)
-            self.ncc_method_combo.setEnabled(True)
-            self.nccmarginlabel.setEnabled(True)
-            self.ncc_margin_entry.setEnabled(True)
-            self.ncc_connect_cb.setEnabled(True)
-            self.ncc_contour_cb.setEnabled(True)
-            self.ncc_choice_offset_cb.setEnabled(True)
-            self.ncc_offset_spinner.setEnabled(True)
+            self.overlap_label.setEnabled(True)
+            self.overlap_entry.setEnabled(True)
+            self.method_label.setEnabled(True)
+            self.method_combo.setEnabled(True)
+            self.margin_label.setEnabled(True)
+            self.margin_entry.setEnabled(True)
+            self.connect_cb.setEnabled(True)
+            self.contour_cb.setEnabled(True)
+            self.offset_choice_cb.setEnabled(True)
+            self.offset_entry.setEnabled(True)
 
-    def on_toggle_reference(self):
-        sel_combo = self.select_combo.get_value()
+    def on_selection(self):
+        sel_combo = self.select_method_combo.get_value()
 
         if sel_combo == 0:  # itself
             self.reference_combo.hide()
-            self.reference_combo_type.hide()
-            self.reference_combo_type_label.hide()
+            self.reference_type_combo.hide()
+            self.reference_type_label.hide()
             self.area_shape_label.hide()
             self.area_shape_radio.hide()
 
             # disable rest-machining for area painting
-            self.ncc_rest_cb.setDisabled(False)
+            self.rest_cb.setDisabled(False)
         elif sel_combo == 1:    # area selection
             self.reference_combo.hide()
-            self.reference_combo_type.hide()
-            self.reference_combo_type_label.hide()
+            self.reference_type_combo.hide()
+            self.reference_type_label.hide()
             self.area_shape_label.show()
             self.area_shape_radio.show()
 
             # disable rest-machining for area painting
-            # self.ncc_rest_cb.set_value(False)
-            # self.ncc_rest_cb.setDisabled(True)
+            # self.rest_cb.set_value(False)
+            # self.rest_cb.setDisabled(True)
         else:
             self.reference_combo.show()
-            self.reference_combo_type.show()
-            self.reference_combo_type_label.show()
+            self.reference_type_combo.show()
+            self.reference_type_label.show()
             self.area_shape_label.hide()
             self.area_shape_radio.hide()
 
             # disable rest-machining for area painting
-            self.ncc_rest_cb.setDisabled(False)
+            self.rest_cb.setDisabled(False)
 
     def on_rest_machining_check(self, state):
         if state:
-            self.ncc_order_combo.set_value(2)   # "Reverse"
-            self.ncc_order_label.setDisabled(True)
-            self.ncc_order_combo.setDisabled(True)
+            self.order_combo.set_value(2)   # "Reverse"
+            self.order_label.setDisabled(True)
+            self.order_combo.setDisabled(True)
 
-            self.nccmarginlabel.hide()
-            self.ncc_margin_entry.hide()
-            self.ncc_connect_cb.hide()
-            self.ncc_contour_cb.hide()
-            self.ncc_choice_offset_cb.hide()
-            self.ncc_offset_spinner.hide()
+            self.margin_label.hide()
+            self.margin_entry.hide()
+            self.connect_cb.hide()
+            self.contour_cb.hide()
+            self.offset_choice_cb.hide()
+            self.offset_entry.hide()
 
-            self.rest_nccmarginlabel.show()
-            self.rest_ncc_margin_entry.show()
-            self.rest_ncc_connect_cb.show()
-            self.rest_ncc_contour_cb.show()
-            self.rest_ncc_choice_offset_cb.show()
-            self.rest_ncc_offset_spinner.show()
+            self.rest_margin_label.show()
+            self.rest_margin_entry.show()
+            self.rest_connect_cb.show()
+            self.rest_contour_cb.show()
+            self.rest_offset_choice_cb.show()
+            self.rest_offset_entry.show()
 
         else:
-            self.ncc_order_label.setDisabled(False)
-            self.ncc_order_combo.setDisabled(False)
+            self.order_label.setDisabled(False)
+            self.order_combo.setDisabled(False)
 
-            self.nccmarginlabel.show()
-            self.ncc_margin_entry.show()
-            self.ncc_connect_cb.show()
-            self.ncc_contour_cb.show()
-            self.ncc_choice_offset_cb.show()
-            self.ncc_offset_spinner.show()
+            self.margin_label.show()
+            self.margin_entry.show()
+            self.connect_cb.show()
+            self.contour_cb.show()
+            self.offset_choice_cb.show()
+            self.offset_entry.show()
 
-            self.rest_nccmarginlabel.hide()
-            self.rest_ncc_margin_entry.hide()
-            self.rest_ncc_connect_cb.hide()
-            self.rest_ncc_contour_cb.hide()
-            self.rest_ncc_choice_offset_cb.hide()
-            self.rest_ncc_offset_spinner.hide()
+            self.rest_margin_label.hide()
+            self.rest_margin_entry.hide()
+            self.rest_connect_cb.hide()
+            self.rest_contour_cb.hide()
+            self.rest_offset_choice_cb.hide()
+            self.rest_offset_entry.hide()
 
     def confirmation_message(self, accepted, minval, maxval):
         if accepted is False:

@@ -80,13 +80,11 @@ class ToolNcc(Gerber, AppTool):
         self.obj_name = ""
         self.ncc_obj = None
 
-        self.sel_rect = []
+        self.areas_to_clear_list: list[Polygon] = []
 
         self.bound_obj_name = ""
         self.bound_obj = None
 
-        self.ncc_dia_list = []
-        self.iso_dia_list = []
         self.has_offset = None
         self.o_name = None
         self.overlap = None
@@ -96,6 +94,9 @@ class ToolNcc(Gerber, AppTool):
 
         # store here the tool diameter that is guaranteed to isolate the object
         self.safe_tooldia = None
+
+        self.ncc_dia_list = []
+        self.iso_dia_list = []
 
         self.first_click = False
         self.cursor_pos = None
@@ -126,13 +127,13 @@ class ToolNcc(Gerber, AppTool):
 
         self.form_fields = {
             "tools_ncc_operation":      self.ui.op_radio,
-            "tools_ncc_overlap":        self.ui.ncc_overlap_entry,
-            "tools_ncc_margin":         self.ui.ncc_margin_entry,
-            "tools_ncc_method":         self.ui.ncc_method_combo,
-            "tools_ncc_connect":        self.ui.ncc_connect_cb,
-            "tools_ncc_contour":        self.ui.ncc_contour_cb,
-            "tools_ncc_offset_choice":  self.ui.ncc_choice_offset_cb,
-            "tools_ncc_offset_value":   self.ui.ncc_offset_spinner,
+            "tools_ncc_overlap":        self.ui.overlap_entry,
+            "tools_ncc_margin":         self.ui.margin_entry,
+            "tools_ncc_method":         self.ui.method_combo,
+            "tools_ncc_connect":        self.ui.connect_cb,
+            "tools_ncc_contour":        self.ui.contour_cb,
+            "tools_ncc_offset_choice":  self.ui.offset_choice_cb,
+            "tools_ncc_offset_value":   self.ui.offset_entry,
             "tools_ncc_milling_type":   self.ui.milling_type_radio,
             "tools_ncc_check_valid":    self.ui.valid_cb
         }
@@ -275,10 +276,10 @@ class ToolNcc(Gerber, AppTool):
         self.ui.deltool_btn.clicked.connect(self.on_tool_delete)
 
         try:
-            self.ui.generate_ncc_button.clicked.disconnect(self.gen.on_ncc_click)
+            self.ui.generate_button.clicked.disconnect(self.gen.on_ncc_click)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.generate_ncc_button.clicked.connect(self.gen.on_ncc_click)
+        self.ui.generate_button.clicked.connect(self.gen.on_ncc_click)
 
         try:
             self.ui.op_radio.activated_custom.disconnect(self.on_operation_change)
@@ -287,28 +288,28 @@ class ToolNcc(Gerber, AppTool):
         self.ui.op_radio.activated_custom.connect(self.on_operation_change)
 
         try:
-            self.ui.reference_combo_type.currentIndexChanged.disconnect(self.on_reference_combo_changed)
+            self.ui.reference_type_combo.currentIndexChanged.disconnect(self.on_reference_combo_changed)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.reference_combo_type.currentIndexChanged.connect(self.on_reference_combo_changed)
+        self.ui.reference_type_combo.currentIndexChanged.connect(self.on_reference_combo_changed)
 
         try:
-            self.ui.select_combo.currentIndexChanged.disconnect(self.ui.on_toggle_reference)
+            self.ui.select_method_combo.currentIndexChanged.disconnect(self.ui.on_selection)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.select_combo.currentIndexChanged.connect(self.ui.on_toggle_reference)
+        self.ui.select_method_combo.currentIndexChanged.connect(self.ui.on_selection)
 
         try:
-            self.ui.ncc_rest_cb.stateChanged.disconnect(self.ui.on_rest_machining_check)
+            self.ui.rest_cb.stateChanged.disconnect(self.ui.on_rest_machining_check)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.ncc_rest_cb.stateChanged.connect(self.ui.on_rest_machining_check)
+        self.ui.rest_cb.stateChanged.connect(self.ui.on_rest_machining_check)
 
         try:
-            self.ui.ncc_order_combo.currentIndexChanged.disconnect(self.on_order_changed)
+            self.ui.order_combo.currentIndexChanged.disconnect(self.on_order_changed)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.ncc_order_combo.currentIndexChanged.connect(self.on_order_changed)
+        self.ui.order_combo.currentIndexChanged.connect(self.on_order_changed)
 
         try:
             self.ui.type_obj_radio.activated_custom.disconnect(self.on_type_obj_index_changed)
@@ -367,13 +368,13 @@ class ToolNcc(Gerber, AppTool):
 
         self.form_fields = {
             "tools_ncc_operation":      self.ui.op_radio,
-            "tools_ncc_overlap":        self.ui.ncc_overlap_entry,
-            "tools_ncc_margin":         self.ui.ncc_margin_entry,
-            "tools_ncc_method":         self.ui.ncc_method_combo,
-            "tools_ncc_connect":        self.ui.ncc_connect_cb,
-            "tools_ncc_contour":        self.ui.ncc_contour_cb,
-            "tools_ncc_offset_choice":  self.ui.ncc_choice_offset_cb,
-            "tools_ncc_offset_value":   self.ui.ncc_offset_spinner,
+            "tools_ncc_overlap":        self.ui.overlap_entry,
+            "tools_ncc_margin":         self.ui.margin_entry,
+            "tools_ncc_method":         self.ui.method_combo,
+            "tools_ncc_connect":        self.ui.connect_cb,
+            "tools_ncc_contour":        self.ui.contour_cb,
+            "tools_ncc_offset_choice":  self.ui.offset_choice_cb,
+            "tools_ncc_offset_value":   self.ui.offset_entry,
             "tools_ncc_milling_type":   self.ui.milling_type_radio,
             "tools_ncc_check_valid":    self.ui.valid_cb
         }
@@ -398,7 +399,7 @@ class ToolNcc(Gerber, AppTool):
             self.on_type_obj_index_changed(val=kind)
             self.on_reference_combo_changed()
 
-            self.ui.object_combo.set_value(active.obj_options['name'])
+            self.ui.obj_combo.set_value(active.obj_options['name'])
         else:
             kind = 'gerber'
             self.ui.type_obj_radio.set_value('gerber')
@@ -409,25 +410,25 @@ class ToolNcc(Gerber, AppTool):
             self.on_reference_combo_changed()
 
         self.ui.op_radio.set_value(self.app.options["tools_ncc_operation"])
-        self.ui.ncc_order_combo.set_value(self.app.options["tools_ncc_order"])
-        self.ui.ncc_overlap_entry.set_value(self.app.options["tools_ncc_overlap"])
-        self.ui.ncc_margin_entry.set_value(self.app.options["tools_ncc_margin"])
-        self.ui.ncc_method_combo.set_value(self.app.options["tools_ncc_method"])
-        self.ui.ncc_connect_cb.set_value(self.app.options["tools_ncc_connect"])
-        self.ui.ncc_contour_cb.set_value(self.app.options["tools_ncc_contour"])
-        self.ui.ncc_choice_offset_cb.set_value(self.app.options["tools_ncc_offset_choice"])
-        self.ui.ncc_offset_spinner.set_value(self.app.options["tools_ncc_offset_value"])
+        self.ui.order_combo.set_value(self.app.options["tools_ncc_order"])
+        self.ui.overlap_entry.set_value(self.app.options["tools_ncc_overlap"])
+        self.ui.margin_entry.set_value(self.app.options["tools_ncc_margin"])
+        self.ui.method_combo.set_value(self.app.options["tools_ncc_method"])
+        self.ui.connect_cb.set_value(self.app.options["tools_ncc_connect"])
+        self.ui.contour_cb.set_value(self.app.options["tools_ncc_contour"])
+        self.ui.offset_choice_cb.set_value(self.app.options["tools_ncc_offset_choice"])
+        self.ui.offset_entry.set_value(self.app.options["tools_ncc_offset_value"])
 
-        self.ui.ncc_rest_cb.set_value(self.app.options["tools_ncc_rest"])
+        self.ui.rest_cb.set_value(self.app.options["tools_ncc_rest"])
         self.ui.on_rest_machining_check(state=self.app.options["tools_ncc_rest"])
 
-        self.ui.rest_ncc_margin_entry.set_value(self.app.options["tools_ncc_margin"])
-        self.ui.rest_ncc_connect_cb.set_value(self.app.options["tools_ncc_connect"])
-        self.ui.rest_ncc_contour_cb.set_value(self.app.options["tools_ncc_contour"])
-        self.ui.rest_ncc_choice_offset_cb.set_value(self.app.options["tools_ncc_offset_choice"])
-        self.ui.rest_ncc_offset_spinner.set_value(self.app.options["tools_ncc_offset_value"])
+        self.ui.rest_margin_entry.set_value(self.app.options["tools_ncc_margin"])
+        self.ui.rest_connect_cb.set_value(self.app.options["tools_ncc_connect"])
+        self.ui.rest_contour_cb.set_value(self.app.options["tools_ncc_contour"])
+        self.ui.rest_offset_choice_cb.set_value(self.app.options["tools_ncc_offset_choice"])
+        self.ui.rest_offset_entry.set_value(self.app.options["tools_ncc_offset_value"])
 
-        self.ui.select_combo.set_value(self.app.options["tools_ncc_ref"])
+        self.ui.select_method_combo.set_value(self.app.options["tools_ncc_ref"])
         self.ui.area_shape_radio.set_value(self.app.options["tools_ncc_area_shape"])
         self.ui.valid_cb.set_value(self.app.options["tools_ncc_check_valid"])
 
@@ -482,7 +483,7 @@ class ToolNcc(Gerber, AppTool):
         if prog_plot:
             self.temp_shapes.clear(update=True)
 
-        self.sel_rect = []
+        self.areas_to_clear_list = []
 
         self.ui.tools_table.drag_drop_sig.connect(self.rebuild_ui)
 
@@ -532,10 +533,10 @@ class ToolNcc(Gerber, AppTool):
             self.ui.op_radio.hide()
             self.ui.milling_type_label.hide()
             self.ui.milling_type_radio.hide()
-            self.ui.ncc_choice_offset_cb.hide()
-            self.ui.ncc_offset_spinner.hide()
+            self.ui.offset_choice_cb.hide()
+            self.ui.offset_entry.hide()
 
-            self.ui.ncc_rest_cb.hide()
+            self.ui.rest_cb.hide()
 
             # All param section
             self.ui.apply_param_to_all.hide()
@@ -571,10 +572,10 @@ class ToolNcc(Gerber, AppTool):
             self.ui.op_radio.show()
             self.ui.milling_type_label.show()
             self.ui.milling_type_radio.show()
-            self.ui.ncc_choice_offset_cb.show()
-            self.ui.ncc_offset_spinner.show()
+            self.ui.offset_choice_cb.show()
+            self.ui.offset_entry.show()
 
-            self.ui.ncc_rest_cb.show()
+            self.ui.rest_cb.show()
 
             # All param section
             self.ui.apply_param_to_all.show()
@@ -584,9 +585,9 @@ class ToolNcc(Gerber, AppTool):
 
     def on_type_obj_index_changed(self, val):
         obj_type = 0 if val == 'gerber' else 2
-        self.ui.object_combo.setRootModelIndex(self.app.collection.index(obj_type, 0, QtCore.QModelIndex()))
-        self.ui.object_combo.setCurrentIndex(0)
-        self.ui.object_combo.obj_type = {
+        self.ui.obj_combo.setRootModelIndex(self.app.collection.index(obj_type, 0, QtCore.QModelIndex()))
+        self.ui.obj_combo.setCurrentIndex(0)
+        self.ui.obj_combo.obj_type = {
             "gerber": "Gerber", "geometry": "Geometry"
         }[self.ui.type_obj_radio.get_value()]
 
@@ -616,7 +617,7 @@ class ToolNcc(Gerber, AppTool):
                 if kind in ['gerber', 'geometry']:
                     self.ui.type_obj_radio.set_value(kind)
 
-                self.ui.object_combo.set_value(name)
+                self.ui.obj_combo.set_value(name)
             except Exception:
                 pass
 
@@ -670,14 +671,14 @@ class ToolNcc(Gerber, AppTool):
             # sel_rows = sorted(set(index.row() for index in self.ui.tools_table.selectedIndexes()))
 
         if not sel_rows or len(sel_rows) == 0:
-            self.ui.generate_ncc_button.setDisabled(True)
+            self.ui.generate_button.setDisabled(True)
             self.ui.tool_data_label.setText(
                 "<b>%s: <font color='#0000FF'>%s</font></b>" % (_('Parameters for'), _("No Tool Selected"))
             )
             self.blockSignals(False)
             return
         else:
-            self.ui.generate_ncc_button.setDisabled(False)
+            self.ui.generate_button.setDisabled(False)
 
         for current_row in sel_rows:
             # populate the form with the data from the tool associated with the row parameter
@@ -781,8 +782,8 @@ class ToolNcc(Gerber, AppTool):
         # type_item = self.ui.tools_table.cellWidget(row, 2).currentText()
         # operation_type_item = self.ui.tools_table.cellWidget(row, 4).currentText()
         #
-        # nccoffset_item = self.ncc_choice_offset_cb.get_value()
-        # nccoffset_value_item = float(self.ncc_offset_spinner.get_value())
+        # nccoffset_item = self.ui.offset_choice_cb.get_value()
+        # nccoffset_value_item = float(self.ui.offset_entry.get_value())
 
         # this new dict will hold the actual useful data, another dict that is the value of key 'data'
         # temp_tools = {}
@@ -851,7 +852,7 @@ class ToolNcc(Gerber, AppTool):
             else:
                 sorted_tools.append(float('%.*f' % (self.decimals, float(v['tooldia']))))
 
-        order = self.ui.ncc_order_combo.get_value()
+        order = self.ui.order_combo.get_value()
         if order == 1:  # "Forward"
             sorted_tools.sort(reverse=False)
         elif order == 2:    # "Reverse"
@@ -956,8 +957,8 @@ class ToolNcc(Gerber, AppTool):
             elif isinstance(current_widget, FCComboBox):
                 current_widget.currentIndexChanged.connect(self.form_to_storage)
 
-        self.ui.ncc_rest_cb.stateChanged.connect(self.ui.on_rest_machining_check)
-        self.ui.ncc_order_combo.currentIndexChanged.connect(self.on_order_changed)
+        self.ui.rest_cb.stateChanged.connect(self.ui.on_rest_machining_check)
+        self.ui.order_combo.currentIndexChanged.connect(self.on_order_changed)
 
     def ui_disconnect(self):
 
@@ -998,11 +999,11 @@ class ToolNcc(Gerber, AppTool):
                     pass
 
         try:
-            self.ui.ncc_rest_cb.stateChanged.disconnect(self.ui.on_rest_machining_check)
+            self.ui.rest_cb.stateChanged.disconnect(self.ui.on_rest_machining_check)
         except (TypeError, ValueError):
             pass
         try:
-            self.ui.ncc_order_combo.currentIndexChanged.disconnect(self.on_order_changed)
+            self.ui.order_combo.currentIndexChanged.disconnect(self.on_order_changed)
         except (TypeError, ValueError):
             pass
 
@@ -1017,7 +1018,7 @@ class ToolNcc(Gerber, AppTool):
             pass
 
     def on_reference_combo_changed(self):
-        obj_type = self.ui.reference_combo_type.currentIndex()
+        obj_type = self.ui.reference_type_combo.currentIndex()
         self.ui.reference_combo.setRootModelIndex(self.app.collection.index(obj_type, 0, QtCore.QModelIndex()))
         self.ui.reference_combo.setCurrentIndex(0)
         self.ui.reference_combo.obj_type = {0: "Gerber", 1: "Excellon", 2: "Geometry"}[obj_type]
@@ -1063,11 +1064,13 @@ class ToolNcc(Gerber, AppTool):
                         if buff_geo.is_valid:
                             total_geo.append(buff_geo)
 
+        total_geo = unary_union(total_geo)
         total_geo = flatten_shapely_geometry(total_geo)
 
-        if len(total_geo) in [0, 1]:
+        if len(total_geo) <= 1:
             msg = ('[ERROR_NOTCL] %s' % _("Too few polygons in the Gerber object to determine distances."))
             return msg, np.inf
+
         min_dict = {}
         idx = 1
         for geo in total_geo:
@@ -1098,50 +1101,69 @@ class ToolNcc(Gerber, AppTool):
 
     # multiprocessing variant
     def find_safe_tooldia_multiprocessing(self):
-        self.app.inform.emit(_("Checking tools for validity."))
+        tools_available = self.ui.tools_table.rowCount()
+        if tools_available == 0:
+            self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools in the Tool Table.")}')
+            return
+        if tools_available > 1:
+            sel_table_items = self.ui.tools_table.selectedItems()
+            if not sel_table_items:
+                self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools selected in the Tool Table.")}')
+                return
+            sel_rows = {t.row() for t in sel_table_items}
+            if not sel_rows:
+                self.app.inform.emit(f'[ERROR_NOTCL] {_("There are no tools selected in the Tool Table.")}')
+                return
+        else:
+            sel_rows = {0}
+
         self.units = self.app.app_units.upper()
 
-        obj_name = self.ui.object_combo.currentText()
-
         # Get source object.
+        obj_name = self.ui.obj_combo.currentText()
         try:
             fcobj = self.app.collection.get_by_name(obj_name)
+            if fcobj is None:
+                self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Object not found"), str(obj_name)))
+                return
         except Exception:
             self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Could not retrieve object"), str(obj_name)))
             return
 
-        if fcobj is None:
-            self.app.inform.emit('[ERROR_NOTCL] %s: %s' % (_("Object not found"), str(obj_name)))
-            return
+        self.app.inform.emit(_("Checking tools for validity."))
+
+        # find the selected tool ID's
+        sorted_tools = []
+        for row in sel_rows:
+            tid = int(self.ui.tools_table.item(row, 3).text())
+            sorted_tools.append(tid)
 
         def job_thread(app_obj):
             with self.app.proc_container.new(_("Checking ...")):
 
                 ap_storage = fcobj.tools
-
                 p = app_obj.pool.apply_async(self.find_optim_mp, args=(ap_storage, self.decimals))
                 res = p.get()
 
                 if res[0] != 'ok':
                     app_obj.inform.emit(res[0])
                     return 'fail'
-                else:
-                    min_dist = res[1]
+
+                min_dist = res[1]
 
                 try:
                     min_dist_truncated = self.app.dec_format(float(min_dist), self.decimals)
                     self.safe_tooldia = min_dist_truncated
 
-                    # find the selected tool ID's
-                    sorted_tools = []
-                    table_items = self.ui.tools_table.selectedItems()
-                    sel_rows = {t.row() for t in table_items}
-                    for row in sel_rows:
-                        tid = int(self.ui.tools_table.item(row, 3).text())
-                        sorted_tools.append(tid)
                     if not sorted_tools:
                         msg = _("There are no tools selected in the Tool Table.")
                         self.app.inform.emit('[ERROR_NOTCL] %s' % msg)
+                        return 'fail'
+
+                    if not self.safe_tooldia:
+                        msg = _("Could not find a safe tool diameter.")
+                        self.app.log.error(msg)
+                        self.app.inform.emit(f'[ERROR_NOTCL] {_("Failed.")}')
                         return 'fail'
 
                     # check if the tools diameters are less than the safe tool diameter
@@ -1162,7 +1184,11 @@ class ToolNcc(Gerber, AppTool):
                     self.safe_tooldia = None
                 except Exception as ee:
                     self.app.log.error(str(ee))
-                    return
+                    return "fail"
+
+                # reset the value to prepare for another isolation
+                self.safe_tooldia = None
+                self.app.inform.emit("Tool validation passed.")
 
         self.app.worker_task.emit({'fcn': job_thread, 'params': [self.app]})
 
@@ -1170,7 +1196,7 @@ class ToolNcc(Gerber, AppTool):
         self.app.inform.emit(_("Checking tools for validity."))
         self.units = self.app.app_units.upper()
 
-        obj_name = self.ui.object_combo.currentText()
+        obj_name = self.ui.obj_combo.currentText()
 
         # Get source object.
         try:
@@ -1663,7 +1689,7 @@ class ToolNcc(Gerber, AppTool):
                             pt1, pt2, pt3, pt4
                         ]
                     )
-                    self.sel_rect.append(new_rectangle)
+                    self.areas_to_clear_list.append(new_rectangle)
 
                     # add a temporary shape on canvas
                     self.draw_tool_selection_shape(old_coords=(x0, y0), coords=(x1, y1))
@@ -1701,7 +1727,7 @@ class ToolNcc(Gerber, AppTool):
                         pol = Polygon(self.points)
                         # do not add invalid polygons even if they are drawn by utility geometry
                         if pol.is_valid:
-                            self.sel_rect.append(pol)
+                            self.areas_to_clear_list.append(pol)
                             self.draw_selection_shape_polygon(points=self.points)
                             self.app.inform.emit(
                                 _("Zone added. Click to start adding next zone or right click to finish.")
@@ -1738,18 +1764,10 @@ class ToolNcc(Gerber, AppTool):
             # disconnect flags
             self.area_sel_disconnect_flag = False
 
-            if len(self.sel_rect) == 0:
+            if len(self.areas_to_clear_list) == 0:
                 return
 
-            self.sel_rect = unary_union(self.sel_rect)
-
-            self.gen.ncc_handler(
-                ncc_obj=self.ncc_obj,
-                sel_obj=self.bound_obj,
-                ncctd_list=self.ncc_dia_list,
-                isotd_list=self.iso_dia_list,
-                outname=self.o_name,
-            )
+            self.gen.clear_ncc_area_selection_option(self.areas_to_clear_list)
 
             self.app.ui.notebook.setDisabled(False)
 
@@ -2023,4 +2041,4 @@ class ToolNcc(Gerber, AppTool):
         self.app.tools_db_tab.ui.cancel_tool_from_db.show()
 
     def reset_fields(self):
-        self.ui.object_combo.setRootModelIndex(self.app.collection.index(0, 0, QtCore.QModelIndex()))
+        self.ui.obj_combo.setRootModelIndex(self.app.collection.index(0, 0, QtCore.QModelIndex()))

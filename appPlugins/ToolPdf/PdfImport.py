@@ -5,7 +5,7 @@
 # MIT Licence                                              #
 # ##########################################################
 
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtCore     # noqa
 from appTool import AppTool
 
 import logging

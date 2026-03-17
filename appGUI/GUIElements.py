@@ -2711,10 +2711,10 @@ class FCComboBox2(FCComboBox):
     def __init__(self, parent=None, callback=None, policy=True):
         super(FCComboBox2, self).__init__(parent=parent, callback=callback, policy=policy)
 
-    def get_value(self):
+    def get_value(self) -> int:
         return int(self.currentIndex())
 
-    def set_value(self, val):
+    def set_value(self, val: int):
         try:
             self.setCurrentIndex(val)
         except TypeError:

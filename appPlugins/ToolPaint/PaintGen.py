@@ -153,7 +153,7 @@ class PaintGen:
             self.app.inform.emit('[ERROR_NOTCL] %s' % _("There are no tools selected in the Tool Table."))
             return
 
-        self.select_method = self.ui.selectmethod_combo.get_value()
+        self.select_method = self.ui.select_method_combo.get_value()
         if self.select_method == 0:  # _("All")
             self.paint_poly_all(self.paint_obj, tooldia=self.tooldia_list, outname=self.o_name)
 
@@ -516,12 +516,12 @@ class PaintGen:
         :return: None
         """
 
-        paint_method = method if method is not None else self.ui.paintmethod_combo.get_value()
+        paint_method = method if method is not None else self.ui.method_combo.get_value()
         # determine if to use the progressive plotting
         prog_plot = True if self.app.options["tools_paint_plotting"] == 'progressive' else False
 
         name = outname if outname is not None else self.obj_name + "_paint"
-        order = order if order is not None else self.ui.paint_order_combo.get_value()
+        order = order if order is not None else self.ui.order_combo.get_value()
         tools_storage = self.paint_tools if tools_storage is None else tools_storage
         use_rest_strategy = rest if rest is not None else self.ui.rest_cb.get_value()
 

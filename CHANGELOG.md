@@ -8,6 +8,13 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+17.03.2026
+
+- ToolPaint and ToolNCC: refactoring the UI elements to use the same name as preparation to extraction of the common code into a 3rd common class
+- ToolNCC: massive refactoring and fixes
+- ToolNCC and ToolIsolation: fixed the determination if the selected tool diameter is suitable for operating on the selected object
+- ToolNCC: fixed bugs
+
 16.03.2026
 
 - remade the workers system; now when assigning a worker we can set the priority of the worker: LOW, NORMAL (default), HIGH

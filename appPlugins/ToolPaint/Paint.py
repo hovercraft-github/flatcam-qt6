@@ -32,7 +32,7 @@ try:
 except ImportError:
     from numpy import inf as Inf    # noqa
 
-from shapely import Polygon
+from shapely import Polygon, MultiPolygon
 from shapely.ops import unary_union
 
 import gettext
@@ -123,11 +123,11 @@ class ToolPaint(Gerber, AppTool):
         self.pluginName = self.ui.pluginName
 
         self.form_fields = {
-            "tools_paint_overlap":   self.ui.paintoverlap_entry,
+            "tools_paint_overlap":   self.ui.overlap_entry,
             "tools_paint_offset":    self.ui.offset_entry,
-            "tools_paint_method":    self.ui.paintmethod_combo,
-            "tools_paint_connect":    self.ui.pathconnect_cb,
-            "tools_paint_contour":   self.ui.paintcontour_cb,
+            "tools_paint_method":    self.ui.method_combo,
+            "tools_paint_connect":    self.ui.connect_cb,
+            "tools_paint_contour":   self.ui.contour_cb,
         }
 
         self.name2option = {
@@ -155,13 +155,13 @@ class ToolPaint(Gerber, AppTool):
         self.ui.obj_combo.setCurrentIndex(0)
         self.ui.obj_combo.obj_type = {"gerber": "Gerber", "geometry": "Geometry"}[val]
 
-        idx = self.ui.paintmethod_combo.findText(_("Laser_lines"))
+        idx = self.ui.method_combo.findText(_("Laser_lines"))
         if self.ui.type_obj_radio.get_value().lower() == 'gerber':
-            self.ui.paintmethod_combo.model().item(idx).setEnabled(True)
+            self.ui.method_combo.model().item(idx).setEnabled(True)
         else:
-            self.ui.paintmethod_combo.model().item(idx).setEnabled(False)
-            if self.ui.paintmethod_combo.get_value() == idx:    # if its Laser Lines
-                self.ui.paintmethod_combo.set_value(idx+1)
+            self.ui.method_combo.model().item(idx).setEnabled(False)
+            if self.ui.method_combo.get_value() == idx:    # if its Laser Lines
+                self.ui.method_combo.set_value(idx+1)
 
     def on_reference_combo_changed(self):
         obj_type = self.ui.reference_type_combo.currentIndex()
@@ -272,16 +272,16 @@ class ToolPaint(Gerber, AppTool):
         self.ui.deltool_btn.clicked.connect(self.on_tool_delete)
 
         try:
-            self.ui.generate_paint_button.clicked.disconnect(self.gen.on_paint_button_click)
+            self.ui.generate_button.clicked.disconnect(self.gen.on_paint_button_click)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.generate_paint_button.clicked.connect(self.gen.on_paint_button_click)
+        self.ui.generate_button.clicked.connect(self.gen.on_paint_button_click)
 
         try:
-            self.ui.selectmethod_combo.currentIndexChanged.disconnect(self.ui.on_selection)
+            self.ui.select_method_combo.currentIndexChanged.disconnect(self.ui.on_selection)
         except (TypeError, RuntimeError, AttributeError):
             pass
-        self.ui.selectmethod_combo.currentIndexChanged.connect(self.ui.on_selection)
+        self.ui.select_method_combo.currentIndexChanged.connect(self.ui.on_selection)
 
         try:
             self.ui.reference_type_combo.currentIndexChanged.disconnect(self.on_reference_combo_changed)
@@ -338,11 +338,11 @@ class ToolPaint(Gerber, AppTool):
         self.pluginName = self.ui.pluginName
 
         self.form_fields = {
-            "tools_paint_overlap":   self.ui.paintoverlap_entry,
+            "tools_paint_overlap":   self.ui.overlap_entry,
             "tools_paint_offset":    self.ui.offset_entry,
-            "tools_paint_method":    self.ui.paintmethod_combo,
-            "tools_paint_connect":    self.ui.pathconnect_cb,
-            "tools_paint_contour":   self.ui.paintcontour_cb,
+            "tools_paint_method":    self.ui.method_combo,
+            "tools_paint_connect":    self.ui.connect_cb,
+            "tools_paint_contour":   self.ui.contour_cb,
         }
 
         self.clear_context_menu()
@@ -413,14 +413,14 @@ class ToolPaint(Gerber, AppTool):
         # })
 
         # ## Init the GUI interface
-        self.ui.paint_order_combo.set_value(self.app.options["tools_paint_order"])
+        self.ui.order_combo.set_value(self.app.options["tools_paint_order"])
         self.ui.offset_entry.set_value(self.app.options["tools_paint_offset"])
-        self.ui.paintmethod_combo.set_value(self.app.options["tools_paint_method"])
-        self.ui.selectmethod_combo.set_value(self.app.options["tools_paint_selectmethod"])
+        self.ui.method_combo.set_value(self.app.options["tools_paint_method"])
+        self.ui.select_method_combo.set_value(self.app.options["tools_paint_selectmethod"])
         self.ui.area_shape_radio.set_value(self.app.options["tools_paint_area_shape"])
-        self.ui.pathconnect_cb.set_value(self.app.options["tools_paint_connect"])
-        self.ui.paintcontour_cb.set_value(self.app.options["tools_paint_contour"])
-        self.ui.paintoverlap_entry.set_value(self.app.options["tools_paint_overlap"])
+        self.ui.connect_cb.set_value(self.app.options["tools_paint_connect"])
+        self.ui.contour_cb.set_value(self.app.options["tools_paint_contour"])
+        self.ui.overlap_entry.set_value(self.app.options["tools_paint_overlap"])
 
         self.ui.new_tooldia_entry.set_value(self.app.options["tools_paint_newdia"])
         self.ui.rest_cb.set_value(self.app.options["tools_paint_rest"])
@@ -483,13 +483,13 @@ class ToolPaint(Gerber, AppTool):
 
         # make sure that we can't get selection of Laser Lines for Geometry even if it's set in the Preferences
         # because we don't select the default object type in Preferences but here
-        idx = self.ui.paintmethod_combo.findText(_("Laser_lines"))
+        idx = self.ui.method_combo.findText(_("Laser_lines"))
         if self.ui.type_obj_radio.get_value().lower() == 'gerber':
-            self.ui.paintmethod_combo.model().item(idx).setEnabled(True)
+            self.ui.method_combo.model().item(idx).setEnabled(True)
         else:
-            self.ui.paintmethod_combo.model().item(idx).setEnabled(False)
-            if self.ui.paintmethod_combo.get_value() == idx:  # if its Laser Lines
-                self.ui.paintmethod_combo.set_value(idx + 1)
+            self.ui.method_combo.model().item(idx).setEnabled(False)
+            if self.ui.method_combo.get_value() == idx:  # if its Laser Lines
+                self.ui.method_combo.set_value(idx + 1)
 
         # Show/Hide Advanced Options
         app_mode = self.app.options["global_app_level"]
@@ -640,14 +640,14 @@ class ToolPaint(Gerber, AppTool):
             # sel_rows = sorted(set(index.row() for index in self.ui.tools_table.selectedIndexes()))
 
         if not sel_rows or len(sel_rows) == 0:
-            self.ui.generate_paint_button.setDisabled(True)
+            self.ui.generate_button.setDisabled(True)
             self.ui.tool_data_label.setText(
                 "<b>%s: <font color='#0000FF'>%s</font></b>" % (_('Parameters for'), _("No Tool Selected"))
             )
             self.blockSignals(False)
             return
         else:
-            self.ui.generate_paint_button.setDisabled(False)
+            self.ui.generate_button.setDisabled(False)
 
         for current_row in sel_rows:
             # populate the form with the data from the tool associated with the row parameter
@@ -817,7 +817,7 @@ class ToolPaint(Gerber, AppTool):
         for k, v in self.paint_tools.items():
             sorted_tools.append(float('%.*f' % (self.decimals, float(v['tooldia']))))
 
-        order = self.ui.paint_order_combo.get_value()
+        order = self.ui.order_combo.get_value()
         if order == 1:  # "Forward"
             sorted_tools.sort(reverse=False)
         elif order == 2:    # "Reverse"
@@ -1421,6 +1421,12 @@ class ToolPaint(Gerber, AppTool):
                 return
 
             self.sel_rect = unary_union(self.sel_rect)
+
+            if isinstance(self.sel_rect, MultiPolygon):
+                self.sel_rect = list(self.sel_rect.geoms)
+            elif isinstance(self.sel_rect, Polygon):
+                self.sel_rect = [self.sel_rect]
+
             self.gen.paint_poly_area(
                 obj=self.paint_obj,
                 tooldia=self.tooldia_list,
@@ -1636,7 +1642,7 @@ class ToolPaint(Gerber, AppTool):
                 current_widget.currentIndexChanged.connect(self.form_to_storage)
 
         self.ui.rest_cb.stateChanged.connect(self.ui.on_rest_machining_check)
-        self.ui.paint_order_combo.currentIndexChanged.connect(self.on_order_changed)
+        self.ui.order_combo.currentIndexChanged.connect(self.on_order_changed)
 
     def ui_disconnect(self):
         try:
@@ -1695,7 +1701,7 @@ class ToolPaint(Gerber, AppTool):
 
         try:
             # if connected, disconnect the signal from the slot on item_changed as it creates issues
-            self.ui.paint_order_combo.currentIndexChanged.disconnect()
+            self.ui.order_combo.currentIndexChanged.disconnect()
         except (TypeError, AttributeError):
             pass
 
