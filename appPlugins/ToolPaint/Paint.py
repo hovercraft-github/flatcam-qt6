@@ -32,8 +32,7 @@ try:
 except ImportError:
     from numpy import inf as Inf    # noqa
 
-from shapely import Polygon, MultiPolygon
-from shapely.ops import unary_union
+from shapely import Polygon
 
 import gettext
 import appTranslation as fcTranslate
@@ -97,7 +96,7 @@ class ToolPaint(Gerber, AppTool):
         self.area_sel_disconnect_flag = False
         self.poly_sel_disconnect_flag = False
 
-        self.sel_rect = []
+        self.area_to_paint_list = []
 
         # store here if the grid snapping is active
         self.grid_status_memory = False
@@ -1347,8 +1346,11 @@ class ToolPaint(Gerber, AppTool):
                     pt3 = (x1, y1)
                     pt4 = (x0, y1)
 
-                    new_rectangle = Polygon([pt1, pt2, pt3, pt4])
-                    self.sel_rect.append(new_rectangle)
+                    self.area_to_paint_list.append(
+                        Polygon(
+                            [pt1, pt2, pt3, pt4]
+                        )
+                    )
 
                     # add a temporary shape on canvas
                     self.draw_tool_selection_shape(old_coords=(x0, y0), coords=(x1, y1))
@@ -1386,7 +1388,7 @@ class ToolPaint(Gerber, AppTool):
                         pol = Polygon(self.points)
                         # do not add invalid polygons even if they are drawn by utility geometry
                         if pol.is_valid:
-                            self.sel_rect.append(pol)
+                            self.area_to_paint_list.append(pol)
                             self.draw_selection_shape_polygon(points=self.points)
                             self.app.inform.emit(
                                 _("Zone added. Click to start adding next zone or right click to finish."))
@@ -1417,22 +1419,10 @@ class ToolPaint(Gerber, AppTool):
             self.area_sel_disconnect_flag = False
             self.app.ui.notebook.setDisabled(False)
 
-            if len(self.sel_rect) == 0:
+            if len(self.area_to_paint_list) == 0:
                 return
 
-            self.sel_rect = unary_union(self.sel_rect)
-
-            if isinstance(self.sel_rect, MultiPolygon):
-                self.sel_rect = list(self.sel_rect.geoms)
-            elif isinstance(self.sel_rect, Polygon):
-                self.sel_rect = [self.sel_rect]
-
-            self.gen.paint_poly_area(
-                obj=self.paint_obj,
-                tooldia=self.tooldia_list,
-                sel_obj=self.sel_rect,
-                outname=self.o_name
-            )
+            self.gen.paint_area_selection_option(self.area_to_paint_list)
 
     # called on mouse move
     def on_mouse_move(self, event):

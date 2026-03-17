@@ -8,6 +8,10 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+18.03.2026 
+
+-ToolPaint: more refactoring
+
 17.03.2026
 
 - ToolPaint and ToolNCC: refactoring the UI elements to use the same name as preparation to extraction of the common code into a 3rd common class

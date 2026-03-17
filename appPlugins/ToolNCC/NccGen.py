@@ -705,7 +705,7 @@ class NccGen:
             return None
 
     def clear_ncc_area_selection_option(self, areas_to_clear_list: list[Polygon | MultiPolygon]):
-        self.app.log.info("NCCGen.clear_ncc_area_selection_option() --> Clearing the NCC area.")
+        self.app.log.info("NCCGen.clear_ncc_area_selection_option() --> Clearing the designated areas(s).")
 
         areas_to_clear_list = unary_union(areas_to_clear_list)
         if isinstance(areas_to_clear_list, MultiPolygon):
@@ -1387,6 +1387,7 @@ class NccGen:
                 return "fail"
 
         def job_thread(app_instance):
+            ret = None
             try:
                 if params.rest_machining_choice:
                     app_instance.app_obj.new_object(
@@ -1403,18 +1404,25 @@ class NccGen:
                         autoselected=False,
                     )
             except grace:
-                app_instance.log.debug("NCC Tool.ncc_handler.job_thread() -> Graceful exit.")
+                app_instance.log.debug("NccGen.ncc_handler.job_thread() -> Graceful exit.")
             except Exception as err:
-                app_instance.log.debug(f"NCC Tool.ncc_handler.job_thread() -> Exception: {str(err)}")
+                app_instance.log.debug(f"NccGen.ncc_handler.job_thread() -> Exception: {str(err)}")
                 traceback.print_stack()
+                ret = "fail"
             finally:
                 if run_threaded:
                     proc.done()
                 else:
                     app_instance.proc_container.view.set_idle()
 
+            if ret == 'fail':
+                self.app.inform.emit('[ERROR] %s' % _("Failed."))
+                return
+
             # focus on Properties Tab
             # self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
+
+            self.app.inform.emit('[success] %s' % _("Done."))
 
         if run_threaded:
             # Promise object with the new output_object_name

@@ -387,7 +387,7 @@ class AppObject(QtCore.QObject):
     def on_object_changed(self, obj):
         """
         Called whenever the geometry of the object was changed in some way.
-        This require the update of it's bounding values so it can be the selected on canvas.
+        This requires the update of it's bounding values so it can be the selected on canvas.
         Update the bounding box data from obj.obj_options
 
         :param obj: the object that was changed
