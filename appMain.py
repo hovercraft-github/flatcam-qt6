@@ -195,7 +195,7 @@ class App(QtCore.QObject):
     # ###############################################################################################################
     version = "Unstable"
     # version = 1.0
-    version_date = "2023/6/31"
+    version_date = "2023/6/30"
     beta = True
     engine = '3D'
 
@@ -332,6 +332,7 @@ class App(QtCore.QObject):
         self.exc_editor = None
         self.grb_editor = None
         self.geo_editor = None
+        self.gcode_editor = None
 
         # when True, the app has to return from any thread
         self.abort_flag = False
@@ -522,7 +523,8 @@ class App(QtCore.QObject):
                 pass
 
             if portable is False:
-                self.data_path = os.path.join(os.getenv('appdata'), 'FlatCAM')
+                self.data_path = os.path.join(
+                    os.getenv('APPDATA', os.path.expanduser('~\\AppData\\Roaming')), 'FlatCAM')
             else:
                 self.data_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + '\\config'
 
@@ -548,24 +550,22 @@ class App(QtCore.QObject):
         db_path = self.tools_database_path()
 
         try:
-            f = open(db_path)
-            f.close()
+            with open(db_path):
+                pass
         except IOError:
             self.log.debug('Creating empty tools_db.FlatDB')
-            f = open(db_path, 'w')
-            json.dump({}, f)
-            f.close()
+            with open(db_path, 'w') as f:
+                json.dump({}, f)
 
         # create current_defaults.FlatConfig file if there is none
         def_path = self.defaults_path()
         try:
-            f = open(def_path)
-            f.close()
+            with open(def_path):
+                pass
         except IOError:
             self.log.debug('Creating empty current_defaults.FlatConfig')
-            f = open(def_path, 'w')
-            json.dump({}, f)
-            f.close()
+            with open(def_path, 'w') as f:
+                json.dump({}, f)
 
         # the factory defaults are written only once at the first launch of the application after installation
         AppDefaults.save_factory_defaults(self.factory_defaults_path(), self.version)
@@ -573,24 +573,22 @@ class App(QtCore.QObject):
         # create a recent files json file if there is none
         rec_f_path = self.recent_files_path()
         try:
-            f = open(rec_f_path)
-            f.close()
+            with open(rec_f_path):
+                pass
         except IOError:
             self.log.debug('Creating empty recent.json')
-            f = open(rec_f_path, 'w')
-            json.dump([], f)
-            f.close()
+            with open(rec_f_path, 'w') as f:
+                json.dump([], f)
 
         # create a recent projects json file if there is none
         rec_proj_path = self.recent_projects_path()
         try:
-            fp = open(rec_proj_path)
-            fp.close()
+            with open(rec_proj_path):
+                pass
         except IOError:
             self.log.debug('Creating empty recent_projects.json')
-            fp = open(rec_proj_path, 'w')
-            json.dump([], fp)
-            fp.close()
+            with open(rec_proj_path, 'w') as fp:
+                json.dump([], fp)
 
         # Application directory. CHDIR to it. Otherwise, trying to load GUI icons will fail as their path is relative.
         # This will fail under cx_freeze ...
@@ -662,10 +660,12 @@ class App(QtCore.QObject):
         # ############################################################################################################
 
         if self.options["global_log_verbose"] == 2:
-            self.log.handlers.pop()
+            if self.log.handlers:
+                self.log.handlers.pop()
             self.log = AppLogging(app=self, log_level=2)
-        if self.options["global_log_verbose"] == 0:
-            self.log.handlers.pop()
+        elif self.options["global_log_verbose"] == 0:
+            if self.log.handlers:
+                self.log.handlers.pop()
             self.log = AppLogging(app=self, log_level=0)
 
         # ###########################################################################################################
@@ -694,7 +694,7 @@ class App(QtCore.QObject):
         # ###########################################################################################################
         splash_settings = QSettings("Open Source", "FlatCAM_EVO")
         if splash_settings.contains("splash_screen"):
-            show_splash = splash_settings.value("splash_screen")
+            show_splash = splash_settings.value("splash_screen", type=int)
         else:
             splash_settings.setValue('splash_screen', 1)
 
@@ -775,7 +775,7 @@ class App(QtCore.QObject):
                 new_ppp_dict[name] = val_class
 
             # and now put back the ordered dict with 'default' key first
-            self.preprocessors = deepcopy(new_ppp_dict)
+            self.preprocessors = new_ppp_dict
 
         # populate the Plugins Preprocessors
         self.options["tools_drill_preprocessor_list"] = []
@@ -944,7 +944,8 @@ class App(QtCore.QObject):
         # set up the PlotCanvas
         self.plotcanvas = self.on_plotcanvas_setup()
         if self.plotcanvas == 'fail':
-            self.splash.finish(self.ui)
+            if self.splash:
+                self.splash.finish(self.ui)
             self.log.debug("Failed to start the Canvas.")
 
             self.clear_pool()
@@ -1173,6 +1174,7 @@ class App(QtCore.QObject):
         # ############################################### SYS TRAY ##################################################
         # ###########################################################################################################
         self.parent_w = QtWidgets.QWidget()
+        self.trayIcon = None
         if self.cmd_line_headless == 1:
             # if running headless always have the systray to be able to quit the app correctly
             self.trayIcon = AppSystemTray(app=self,
@@ -1440,13 +1442,18 @@ class App(QtCore.QObject):
         :param to_path: destination path
         :return: None
         """
+        if not os.path.exists(from_path):
+            raise FileNotFoundError("Source path does not exist: %s" % from_path)
         if os.path.exists(to_path):
             shutil.rmtree(to_path)
         try:
             shutil.copytree(from_path, to_path)
         except FileNotFoundError:
-            from_new_path = os.path.dirname(os.path.realpath(__file__)) + '\\appGUI\\VisPyData\\data'
-            shutil.copytree(from_new_path, to_path)
+            from_new_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'appGUI', 'VisPyData', 'data')
+            try:
+                shutil.copytree(from_new_path, to_path)
+            except Exception as e:
+                raise IOError("Failed to copy fallback directory: %s" % str(e)) from e
 
     def connect_custom_signal(self, target, params):
         try:
@@ -1521,7 +1528,7 @@ class App(QtCore.QObject):
 
             elif 'quit'.lower() in argument.lower() or 'exit'.lower() in argument.lower():
                 self.log.debug("App.on_startup_args() --> Quit event.")
-                sys.exit()
+                self.app_quit.emit()
 
             elif 'save'.lower() in argument.lower():
                 self.log.debug("App.on_startup_args() --> Save event. App Defaults saved.")
@@ -1628,7 +1635,11 @@ class App(QtCore.QObject):
 
         :return: None
         """
-        self.pool.close()
+        try:
+            self.pool.terminate()
+            self.pool.join()
+        except (ValueError, AttributeError):
+            pass
 
         self.pool = Pool(processes=self.options["global_process_number"])
         self.pool_recreated.emit(self.pool)
@@ -1773,7 +1784,7 @@ class App(QtCore.QObject):
                                     separator=True)
         except Exception as im_err:
             self.log.error("Image Import plugin could not be started due of: %s" % str(im_err))
-            self.image_tool = lambda x: None
+            self.image_tool = None
 
         self.pcb_wizard_tool = PcbWizard(self)
         self.pcb_wizard_tool.install(icon=QtGui.QIcon(self.resource_location + '/drill32.png'),
@@ -1818,6 +1829,9 @@ class App(QtCore.QObject):
             self.etch_tool
         ]
 
+        # Filter out None values (e.g., if image_tool failed to initialize)
+        self.app_plugins = [p for p in self.app_plugins if p is not None]
+
         self.log.debug("Tools are installed.")
 
     def remove_tools(self):
@@ -1846,13 +1860,12 @@ class App(QtCore.QObject):
         for tab_idx in range(self.ui.notebook.count()):
             if self.ui.notebook.widget(tab_idx).objectName() == "plugin_tab":
                 found_idx = tab_idx
-                print(found_idx)
                 break
-        remove_idx = found_idx if found_idx else 2
-        widget = QtWidgets.QTabWidget.widget(self.ui.notebook, remove_idx)
-        if widget is not None:
-            widget.deleteLater()
-        self.ui.notebook.removeTab(remove_idx)
+        if found_idx is not None:
+            widget = QtWidgets.QTabWidget.widget(self.ui.notebook, found_idx)
+            if widget is not None:
+                widget.deleteLater()
+            self.ui.notebook.removeTab(found_idx)
 
         # rebuild the Tools Tab
         # self.ui.plugin_tab = QtWidgets.QWidget()
@@ -2099,13 +2112,16 @@ class App(QtCore.QObject):
         self.log.debug(" -> Connecting Editors Toolbar Signals")
 
         # Geometry Editor Toolbar Signals
-        self.geo_editor.connect_geo_toolbar_signals()
+        if self.geo_editor is not None:
+            self.geo_editor.connect_geo_toolbar_signals()
 
         # Gerber Editor Toolbar Signals
-        self.grb_editor.connect_grb_toolbar_signals()
+        if self.grb_editor is not None:
+            self.grb_editor.connect_grb_toolbar_signals()
 
         # Excellon Editor Toolbar Signals
-        self.exc_editor.connect_exc_toolbar_signals()
+        if self.exc_editor is not None:
+            self.exc_editor.connect_exc_toolbar_signals()
 
     def connect_toolbar_signals(self):
         """
@@ -2499,6 +2515,10 @@ class App(QtCore.QObject):
         # created by the Editor
         edited_obj = self.collection.get_active()
 
+        if edited_obj is None:
+            self.inform.emit('[WARNING_NOTCL] %s' % _("No object is selected."))
+            return
+
         if cleanup is None:
             msgbox = FCMessageBox(parent=self.ui)
             title = _("Exit Editor")
@@ -2532,7 +2552,7 @@ class App(QtCore.QObject):
                     if self.ui.notebook.widget(idx).objectName() == "plugin_tab":
                         found_idx = idx
                         break
-                if found_idx:
+                if found_idx is not None:
                     self.ui.notebook.setCurrentWidget(self.ui.properties_tab)
                     self.ui.notebook.removeTab(found_idx)
 
@@ -2650,9 +2670,9 @@ class App(QtCore.QObject):
                     if self.ui.notebook.widget(idx).objectName() == "plugin_tab":
                         found_idx = idx
                         break
-                if found_idx:
+                if found_idx is not None:
                     self.ui.notebook.setCurrentWidget(self.ui.properties_tab)
-                    self.ui.notebook.removeTab(2)
+                    self.ui.notebook.removeTab(found_idx)
 
                 self.inform.emit('[WARNING_NOTCL] %s' % _("Editor exited. Editor content was not saved."))
 
@@ -2675,13 +2695,12 @@ class App(QtCore.QObject):
                         try:
                             if self.ui.plot_tab_area.widget(idx).objectName() == 'gcode_editor_tab':
                                 self.ui.plot_tab_area.closeTab(idx)
+                                break
                         except AttributeError:
                             continue
-                else:
-                    self.inform.emit('[WARNING_NOTCL] %s' %
-                                     _("Select a Gerber, Geometry, Excellon or CNCJob Object to update."))
-                    return
-            elif response == bt_cancel:
+            else:
+                self.inform.emit('[WARNING_NOTCL] %s' %
+                                 _("Select a Gerber, Geometry, Excellon or CNCJob Object to update."))
                 return
 
             # edited_obj.set_ui(edited_obj.ui_type(decimals=self.decimals))
@@ -2704,7 +2723,7 @@ class App(QtCore.QObject):
                 self.gcode_editor.deactivate()
             else:
                 self.inform.emit('[WARNING_NOTCL] %s' %
-                                 _("Select a Gerber, Geometry, Excellon or CNCJob object to update."))
+                                 _("Select a Gerber, Geometry, Excellon or CNCJob Object to update."))
                 return
 
         self.post_edit_sig.emit()
@@ -2867,23 +2886,10 @@ class App(QtCore.QObject):
             self.inform.emit('[WARNING_NOTCL] %s' % _("Cancelled."))
             return
         else:
-            try:
-                with open(filename, 'w') as f:
-                    ___ = f.read()
-            except PermissionError:
+            if os.path.exists(filename) and not os.access(filename, os.W_OK):
                 self.inform.emit('[WARNING] %s' %
                                  _("Permission denied, saving not possible.\n"
                                    "Most likely another app is holding the file open and not accessible."))
-                return
-            except IOError:
-                self.log.debug('Creating a new file ...')
-                f = open(filename, 'w')
-                f.close()
-            except Exception:
-                e = sys.exc_info()[0]
-                self.log.error("Could not load the file.")
-                self.log.error(str(e))
-                self.inform.emit('[ERROR_NOTCL] %s' % _("Could not load the file."))
                 return
 
             # Save content
@@ -2895,8 +2901,9 @@ class App(QtCore.QObject):
             try:
                 with open(filename, "w") as f:
                     f.write(file_content)
-            except Exception:
-                self.inform.emit('[ERROR_NOTCL] %s %s' % (_("Failed to write defaults to file."), str(filename)))
+            except Exception as e:
+                self.log.error("App.save_to_file() --> Failed to write to %s: %s" % (str(filename), str(e)))
+                self.inform.emit('[ERROR_NOTCL] %s %s' % (_("Failed to write to file."), str(filename)))
                 return
 
         self.inform.emit('[success] %s: %s' % (_("Exported file to"), filename))
@@ -2932,26 +2939,22 @@ class App(QtCore.QObject):
             self.recent_projects.pop()
 
         try:
-            f = open(os.path.join(self.data_path, 'recent.json'), 'w')
+            with open(os.path.join(self.data_path, 'recent.json'), 'w') as f:
+                json.dump(self.recent, f, default=to_dict, indent=2, sort_keys=True)
         except IOError:
             self.log.error("Failed to open recent items file for writing.")
             self.inform.emit('[ERROR_NOTCL] %s' %
                              _('Failed to open recent files file for writing.'))
             return
 
-        json.dump(self.recent, f, default=to_dict, indent=2, sort_keys=True)
-        f.close()
-
         try:
-            fp = open(os.path.join(self.data_path, 'recent_projects.json'), 'w')
+            with open(os.path.join(self.data_path, 'recent_projects.json'), 'w') as fp:
+                json.dump(self.recent_projects, fp, default=to_dict, indent=2, sort_keys=True)
         except IOError:
             self.log.error("Failed to open recent items file for writing.")
             self.inform.emit('[ERROR_NOTCL] %s' %
                              _('Failed to open recent projects file for writing.'))
             return
-
-        json.dump(self.recent_projects, fp, default=to_dict, indent=2, sort_keys=True)
-        fp.close()
 
         # Re-build the recent items menu
         self.setup_recent_items()
@@ -3852,6 +3855,9 @@ class App(QtCore.QObject):
         # hide the UI so the user experiments a faster shutdown
         self.ui.hide()
 
+        # stop autosave timer to prevent it from firing during shutdown
+        self.autosave_timer.stop()
+
         if sys.platform == 'win32':
             self.new_launch.stop.emit()     # noqa
             # https://forum.qt.io/topic/108777/stop-a-loop-in-object-that-has-been-moved-to-a-qthread/7
@@ -3860,7 +3866,7 @@ class App(QtCore.QObject):
                 self.log.debug("ArgThread QThread requested an interruption.")
 
         # close editors before quiting the app, if they are open
-        if self.call_source == 'geo_editor':
+        if self.geo_editor is not None:
             self.geo_editor.deactivate()
             try:
                 self.geo_editor.disconnect()
@@ -3869,7 +3875,7 @@ class App(QtCore.QObject):
             if silent is False:
                 self.log.debug("App.quit_application() --> Geo Editor deactivated.")
 
-        if self.call_source == 'exc_editor':
+        if self.exc_editor is not None:
             self.exc_editor.deactivate()
             try:
                 self.exc_editor.disconnect()
@@ -3878,7 +3884,7 @@ class App(QtCore.QObject):
             if silent is False:
                 self.log.debug("App.quit_application() --> Excellon Editor deactivated.")
 
-        if self.call_source == 'grb_editor':
+        if self.grb_editor is not None:
             self.grb_editor.deactivate_grb_editor()
             try:
                 self.grb_editor.disconnect()
@@ -3886,6 +3892,15 @@ class App(QtCore.QObject):
                 pass
             if silent is False:
                 self.log.debug("App.quit_application() --> Gerber Editor deactivated.")
+
+        if self.gcode_editor is not None:
+            self.gcode_editor.deactivate()
+            try:
+                self.gcode_editor.disconnect()
+            except TypeError:
+                pass
+            if silent is False:
+                self.log.debug("App.quit_application() --> GCode Editor deactivated.")
 
         # disconnect the mouse events
         if self.use_3d_engine:
@@ -3945,7 +3960,11 @@ class App(QtCore.QObject):
 
         # terminate workers
         # self.workers.__del__()
-        self.clear_pool()
+        try:
+            self.pool.terminate()
+            self.pool.join()
+        except (ValueError, AttributeError):
+            pass
 
         self.workers.quit()
 
@@ -4001,6 +4020,9 @@ class App(QtCore.QObject):
         except FileNotFoundError:
             pass
 
+        if data is None:
+            return
+
         for line in data:
             line = line.strip('\n')
             param = str(line).rpartition('=')
@@ -4009,51 +4031,53 @@ class App(QtCore.QObject):
             line_no += 1
 
         if state == QtCore.Qt.CheckState.Checked:
-            data[line_no] = 'portable=True\n'
+            if line_no >= len(data):
+                data.append('portable=True\n')
+            else:
+                data[line_no] = 'portable=True\n'
             # create the new defaults files
             # create current_defaults.FlatConfig file if there is none
             try:
-                f = open(current_data_path + '/current_defaults.FlatConfig')
-                f.close()
+                with open(current_data_path + '/current_defaults.FlatConfig'):
+                    pass
             except IOError:
                 self.log.debug('Creating empty current_defaults.FlatConfig')
-                f = open(current_data_path + '/current_defaults.FlatConfig', 'w')
-                json.dump({}, f)
-                f.close()
+                with open(current_data_path + '/current_defaults.FlatConfig', 'w') as f:
+                    json.dump({}, f)
 
             # create factory_defaults.FlatConfig file if there is none
             try:
-                f = open(current_data_path + '/factory_defaults.FlatConfig')
-                f.close()
+                with open(current_data_path + '/factory_defaults.FlatConfig'):
+                    pass
             except IOError:
                 self.log.debug('Creating empty factory_defaults.FlatConfig')
-                f = open(current_data_path + '/factory_defaults.FlatConfig', 'w')
-                json.dump({}, f)
-                f.close()
+                with open(current_data_path + '/factory_defaults.FlatConfig', 'w') as f:
+                    json.dump({}, f)
 
             try:
-                f = open(current_data_path + '/recent.json')
-                f.close()
+                with open(current_data_path + '/recent.json'):
+                    pass
             except IOError:
                 self.log.debug('Creating empty recent.json')
-                f = open(current_data_path + '/recent.json', 'w')
-                json.dump([], f)
-                f.close()
+                with open(current_data_path + '/recent.json', 'w') as f:
+                    json.dump([], f)
 
             try:
-                fp = open(current_data_path + '/recent_projects.json')
-                fp.close()
+                with open(current_data_path + '/recent_projects.json'):
+                    pass
             except IOError:
                 self.log.debug('Creating empty recent_projects.json')
-                fp = open(current_data_path + '/recent_projects.json', 'w')
-                json.dump([], fp)
-                fp.close()
+                with open(current_data_path + '/recent_projects.json', 'w') as fp:
+                    json.dump([], fp)
 
             # save the current defaults to the new defaults file
             self.preferencesUiManager.save_defaults(silent=True, data_path=current_data_path)
 
         else:
-            data[line_no] = 'portable=False\n'
+            if line_no >= len(data):
+                data.append('portable=False\n')
+            else:
+                data[line_no] = 'portable=False\n'
 
         with open(config_file, 'w') as f:
             f.writelines(data)
@@ -4139,11 +4163,17 @@ class App(QtCore.QObject):
         # ## Current application units in Upper Case
         self.units = self.app_units.upper()
 
-        notebook_widget_name = self.ui.notebook.currentWidget().objectName()
+        current_widget = self.ui.notebook.currentWidget()
+        if current_widget is None:
+            return
+        notebook_widget_name = current_widget.objectName()
 
         # work only if the notebook tab on focus is the properties_tab and only if the object is Geometry
         if notebook_widget_name == 'properties_tab':
-            if self.collection.get_active().kind == 'geometry':
+            active_obj = self.collection.get_active()
+            if active_obj is None:
+                return
+            if active_obj.kind == 'geometry':
                 # Tool add works for Geometry only if Advanced is True in Preferences
                 if self.options["global_app_level"] == 'a':
                     tool_add_popup = FCInputSpinner(title='%s...' % _("New Tool"),
@@ -4206,31 +4236,35 @@ class App(QtCore.QObject):
     # It's meant to delete tools in tool tables via a 'Delete' shortcut key but only if certain conditions are met
     # See description below.
     def on_delete_keypress(self):
-        notebook_widget_name = self.ui.notebook.currentWidget().objectName()
+        current_widget = self.ui.notebook.currentWidget()
+        if current_widget is None:
+            return
+        notebook_widget_name = current_widget.objectName()
 
         # work only if the notebook tab on focus is the properties_tab and only if the object is Geometry
         if notebook_widget_name == 'properties_tab':
-            if self.collection.get_active().kind == 'geometry':
-                self.collection.get_active().on_tool_delete()
+            active = self.collection.get_active()
+            if active is not None and active.kind == 'geometry':
+                active.on_tool_delete()
 
         # work only if the notebook tab on focus is the Tools_Tab
         elif notebook_widget_name == 'plugin_tab':
             tool_widget = self.ui.plugin_scroll_area.widget().objectName()
 
             # and only if the tool is NCC Plugin
-            if tool_widget == self.ncclear_tool.pluginName:
+            if self.ncclear_tool is not None and tool_widget == self.ncclear_tool.pluginName:
                 self.ncclear_tool.on_tool_delete()
 
             # and only if the tool is Paint Plugin
-            elif tool_widget == self.paint_tool.pluginName:
+            elif self.paint_tool is not None and tool_widget == self.paint_tool.pluginName:
                 self.paint_tool.on_tool_delete()
 
             # and only if the tool is Solder Paste Dispensing Plugin
-            elif tool_widget == self.paste_tool.pluginName:
+            elif self.paste_tool is not None and tool_widget == self.paste_tool.pluginName:
                 self.paste_tool.on_tool_delete()
 
             # and only if the tool is Isolation Plugin
-            elif tool_widget == self.isolation_tool.pluginName:
+            elif self.isolation_tool is not None and tool_widget == self.isolation_tool.pluginName:
                 self.isolation_tool.on_tool_delete()
         else:
             self.on_delete()
@@ -4286,7 +4320,8 @@ class App(QtCore.QObject):
                             obj_active.mark_shapes_storage.clear()
                             obj_active.mark_shapes.clear(update=True)
                             obj_active.mark_shapes.enabled = False
-                            self.tool_shapes.clear(update=True)
+                            if self.tool_shapes is not None:
+                                self.tool_shapes.clear(update=True)
 
                         elif obj_active.kind == 'cncjob':
                             try:
@@ -4301,7 +4336,8 @@ class App(QtCore.QObject):
                                                                                    str(e))
                                 )
 
-                    for ob in self.collection.get_selected():
+                    selected = list(self.collection.get_selected())
+                    for ob in selected:
                         self.delete_first_selected(ob)
 
                     # make sure that the selection shape is deleted, too
@@ -4334,7 +4370,7 @@ class App(QtCore.QObject):
             # Remove plot only if the object was plotted otherwise will fail
             if isPlotted:
                 try:
-                    self.plotcanvas.figure.delaxes(self.collection.get_active().shapes.axes)
+                    self.plotcanvas.figure.delaxes(sel_obj.shapes.axes)
                 except Exception as e:
                     self.log.error("App.delete_first_selected() --> %s" % str(e))
 
@@ -4367,7 +4403,7 @@ class App(QtCore.QObject):
 
         self.connect_custom_signal(plotcanvas_fit_view, object)
 
-        def origin_replot():
+        def origin_replot(_list=None):
             def worker_task():
                 with self.proc_container.new('%s...' % _("Plotting")):
                     for obj in self.collection.get_list():
@@ -4838,6 +4874,7 @@ class App(QtCore.QObject):
                 # it's an App object, return its bounds
                 if obj:     # this needs to be more descritibe perhaps with type hints
                     return obj.bounds()     # noqa
+                return 0, 0, 0, 0
 
         bounds = bounds_rec(obj_list)   # noqa
 
@@ -4897,11 +4934,6 @@ class App(QtCore.QObject):
                 pass
 
             try:
-                obj_init.tools = deepcopy(obj.tools)
-            except AttributeError:
-                pass
-
-            try:
                 if obj.tools:
                     obj_init.tools = deepcopy(obj.tools)
             except Exception as cerr:
@@ -4946,6 +4978,9 @@ class App(QtCore.QObject):
                     self.app_obj.new_object("script", str(obj_name) + "_copy", initialize_script)
                 elif obj.kind == 'document':
                     self.app_obj.new_object("document", str(obj_name) + "_copy", initialize_document)
+                elif obj.kind == 'cncjob':
+                    self.log.warning("on_copy_command() --> CNCJob objects cannot be copied.")
+                    self.app_obj.inform.emit('[WARNING_NOTCL] %s' % _("CNCJob objects cannot be copied."))
             except Exception as e:
                 self.log.error("Copy operation failed: %s for object: %s" % (str(e), str(obj_name)))
 
@@ -5010,15 +5045,11 @@ class App(QtCore.QObject):
         self.defaults.report_usage("on_rename_object()")
 
         named_obj = self.collection.get_active()
-        for obj in named_obj:
-            if obj is list:
-                self.on_rename_object(text)
-            else:
-                try:
-                    obj.obj_options['name'] = text
-                except Exception as e:
-                    self.log.error(
-                        "App.on_rename_object() --> Could not rename the object in the list. --> %s" % str(e))
+        if named_obj is not None:
+            try:
+                named_obj.obj_options['name'] = text
+            except Exception as e:
+                self.log.error("App.on_rename_object() --> Could not rename: %s" % str(e))
 
     def abort_all_tasks(self):
         """
@@ -5380,6 +5411,7 @@ class App(QtCore.QObject):
                 else:
                     self.tools_db_changed_flag = False
                     self.inform.emit('')
+                    self.tools_db_tab.deleteLater()
                     return
             self.tools_db_tab.deleteLater()
         elif tab_obj_name == "text_editor_tab":
@@ -5441,7 +5473,8 @@ class App(QtCore.QObject):
 
         try:
             # clean possible tool shapes for Isolation, NCC, Paint, Punch Gerber Plugins
-            self.tool_shapes.clear(update=True)
+            if self.tool_shapes is not None:
+                self.tool_shapes.clear(update=True)
         except AttributeError:
             pass
 
@@ -5451,7 +5484,7 @@ class App(QtCore.QObject):
             if self.ui.notebook.widget(idx).objectName() == "plugin_tab":
                 found_idx = idx
                 break
-        if found_idx:
+        if found_idx is not None:
             # #########################################################################################################
             # first do the Plugin cleanup
             # #########################################################################################################
@@ -6129,7 +6162,7 @@ class App(QtCore.QObject):
             # WORKAROUND for LEGACY MODE
             if self.use_3d_engine is False:
                 # if there is no move on canvas then we have no dragging selection
-                if self.dx == 0 or self.dy == 0:
+                if self.dx == 0 and self.dy == 0:
                     self.selection_type = None
 
             # End moving selection
@@ -6608,6 +6641,9 @@ class App(QtCore.QObject):
         :return:        None
         """
 
+        if sel_obj is None:
+            return
+
         pt1 = (float(sel_obj.obj_options['xmin']), float(sel_obj.obj_options['ymin']))
         pt2 = (float(sel_obj.obj_options['xmax']), float(sel_obj.obj_options['ymin']))
         pt3 = (float(sel_obj.obj_options['xmax']), float(sel_obj.obj_options['ymax']))
@@ -6687,7 +6723,7 @@ class App(QtCore.QObject):
         except Exception:
             pass
 
-        if b_sel_rect.is_empty or not b_sel_rect.is_valid or b_sel_rect is None:
+        if b_sel_rect is None or b_sel_rect.is_empty or not b_sel_rect.is_valid:
             b_sel_rect = sel_rect
 
         if self.options['global_selection_shape_as_line'] is True:
@@ -6806,6 +6842,9 @@ class App(QtCore.QObject):
                     filename, _f = FCFileSaveDialog.get_saved_filename(
                         caption=_("Export Code ..."),
                         ext_filter=_filter_)
+
+                if not filename:
+                    return
 
                 path = filename.rpartition('/')[0]
                 file_extension = filename.rpartition('.')[2]
@@ -6964,9 +7003,15 @@ class App(QtCore.QObject):
         if self.toggle_codeeditor is False:
             self.init_code_editor(name=_("Code Editor"))
 
-            self.text_editor_tab.buttonOpen.clicked.disconnect()
+            try:
+                self.text_editor_tab.buttonOpen.clicked.disconnect()
+            except TypeError:
+                pass
             self.text_editor_tab.buttonOpen.clicked.connect(self.text_editor_tab.handleOpen)
-            self.text_editor_tab.buttonSave.clicked.disconnect()
+            try:
+                self.text_editor_tab.buttonSave.clicked.disconnect()
+            except TypeError:
+                pass
             self.text_editor_tab.buttonSave.clicked.connect(self.text_editor_tab.handleSaveGCode)
         else:
             for idx in range(self.ui.plot_tab_area.count()):
@@ -7070,7 +7115,9 @@ class App(QtCore.QObject):
         try:
             image_opener = self.image_tool.import_image
         except AttributeError:
-            image_opener = None
+            def image_opener_fallback(filename):
+                self.inform.emit('[WARNING] %s' % _("Cannot open image file. Image tool is not available."))
+            image_opener = image_opener_fallback
 
         openers = {
             'gerber': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.open_gerber, 'params': [fname]}),
@@ -7088,37 +7135,31 @@ class App(QtCore.QObject):
 
         # Open recent file for files
         try:
-            f = open(os.path.join(self.data_path, 'recent.json'))
+            with open(os.path.join(self.data_path, 'recent.json')) as f:
+                try:
+                    self.recent = json.load(f)
+                except json.JSONDecodeError:
+                    self.log.error("Failed to parse recent item list.")
+                    self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to parse recent item list."))
+                    return
         except IOError:
             self.log.error("Failed to load recent item list.")
             self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to load recent item list."))
             return
 
-        try:
-            self.recent = json.load(f)
-        except json.JSONDecodeError:
-            self.log.error("Failed to parse recent item list.")
-            self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to parse recent item list."))
-            f.close()
-            return
-        f.close()
-
         # Open recent file for projects
         try:
-            fp = open(os.path.join(self.data_path, 'recent_projects.json'))
+            with open(os.path.join(self.data_path, 'recent_projects.json')) as fp:
+                try:
+                    self.recent_projects = json.load(fp)
+                except json.JSONDecodeError:
+                    self.log.error("Failed to parse recent project item list.")
+                    self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to parse recent project item list."))
+                    return
         except IOError:
             self.log.error("Failed to load recent project item list.")
             self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to load recent projects item list."))
             return
-
-        try:
-            self.recent_projects = json.load(fp)
-        except json.JSONDecodeError:
-            self.log.error("Failed to parse recent project item list.")
-            self.inform.emit('[ERROR_NOTCL] %s' % _("Failed to parse recent project item list."))
-            fp.close()
-            return
-        fp.close()
 
         # Closure needed to create callbacks in a loop.
         # Otherwise, late binding occurs.
@@ -7133,12 +7174,12 @@ class App(QtCore.QObject):
             self.ui.recent.clear()
             self.recent = []
             try:
-                ff = open(os.path.join(self.data_path, 'recent.json'), 'w')
+                with open(os.path.join(self.data_path, 'recent.json'), 'w') as ff:
+                    json.dump(self.recent, ff)
             except IOError:
                 self.log.error("Failed to open recent items file for writing.")
                 return
 
-            json.dump(self.recent, ff)
             self.inform.emit('%s' % _("Recent files list was reset."))
 
         def reset_recent_projects():
@@ -7147,12 +7188,11 @@ class App(QtCore.QObject):
             self.recent_projects = []
 
             try:
-                frp = open(os.path.join(self.data_path, 'recent_projects.json'), 'w')
+                with open(os.path.join(self.data_path, 'recent_projects.json'), 'w') as frp:
+                    json.dump(self.recent_projects, frp)
             except IOError:
                 self.log.error("Failed to open recent projects items file for writing.")
                 return
-
-            json.dump(self.recent, frp)
             self.inform.emit('%s' % _("Recent projects list was reset."))
 
         # Reset menu
@@ -7360,7 +7400,7 @@ class App(QtCore.QObject):
         self.log.debug("Checking for updates @ %s" % full_url)
         # ## Get the data
         try:
-            f = urllib.request.urlopen(full_url)
+            f = urllib.request.urlopen(full_url, timeout=10)
         except Exception:
             # self.log.warning("Failed checking for latest version. Could not connect.")
             self.log.warning("Failed checking for latest version. Could not connect.")
@@ -7379,17 +7419,28 @@ class App(QtCore.QObject):
         f.close()
 
         # ## Latest version?
-        if self.version >= data["version"]:
-            self.log.debug("THe application is up to date!")
+        if "version" not in data:
+            self.log.warning("Version check response missing 'version' key.")
+            return
+        try:
+            data_version = int(data["version"])
+        except (ValueError, TypeError):
+            self.log.warning("Version check response has invalid 'version' value.")
+            return
+
+        if self.version >= data_version:
+            self.log.debug("The application is up to date!")
             self.inform.emit('[success] %s' % _("The application is up to date!"))
             return
 
         self.log.debug("Newer version available.")
         title = _("Newer Version Available")
+        name = data.get("name", "")
+        message = data.get("message", "")
         msg = '%s<br><br>><b>%s</b><br>%s' % (
             _("There is a newer version available for download:"),
-            str(data["name"]),
-            str(data["message"])
+            str(name),
+            str(message)
         )
         self.message.emit(title, msg, "info")
 
@@ -7571,6 +7622,7 @@ class App(QtCore.QObject):
                     obj.build_ui()
                     # and try again
                     self.enable_plots(objects)
+                    return
 
                 obj.set_form_item("plot")
                 try:
@@ -7581,6 +7633,7 @@ class App(QtCore.QObject):
                     obj.build_ui()
                     # and try again
                     self.enable_plots(objects)
+                    return
                 obj.obj_options.set_change_callback(obj.on_options_change)
         self.collection.update_view()
 
@@ -7618,6 +7671,7 @@ class App(QtCore.QObject):
                     obj.build_ui()
                     # and try again
                     self.disable_plots(objects)
+                    return
 
                 obj.set_form_item("plot")
                 try:
@@ -7628,6 +7682,7 @@ class App(QtCore.QObject):
                     obj.build_ui()
                     # and try again
                     self.disable_plots(objects)
+                    return
                 obj.obj_options.set_change_callback(obj.on_options_change)
 
         try:
@@ -7813,7 +7868,7 @@ class App(QtCore.QObject):
                 group = self.collection.group_items["gerber"]
                 group_index = self.collection.index(group.row(), 0, QtCore.QModelIndex())
 
-                alpha_str = str(hex(alpha_level)[2:]) if alpha_level != 0 else '00'
+                alpha_str = format(alpha_level, '02x') if alpha_level != 0 else '00'
 
                 for sel_obj in sel_obj_list:
                     new_color = sel_obj.fill_color[:-2] + alpha_str
@@ -8113,14 +8168,16 @@ class ArgsThread(QtCore.QObject):
                 if sys.platform == 'win32':
                     pass
                 else:
-                    os.system('rm /tmp/testipc')
+                    try:
+                        os.remove('/tmp/testipc')
+                    except OSError:
+                        pass
                     self.listener = Listener(*address)
-                    while True:
+                    while self.thread_exit is False:
                         conn = self.listener.accept()
                         self.serve(conn)
-        except Exception:
-            pass
-            # print(str(gen_err))
+        except Exception as e:
+            self.log.error("ArgsThread.my_loop() exception: %s" % str(e))
 
     def serve(self, conn):
         while self.thread_exit is False:
