@@ -6,7 +6,7 @@
 # MIT Licence                                                 #
 # ########################################################## ##
 import shapely
-from PyQt6 import QtWidgets
+from PyQt6 import QtWidgets     # noqa
 
 from appCommon.Common import GracefulException as grace
 
@@ -42,7 +42,7 @@ import shapely.affinity as affinity
 from shapely.affinity import scale, translate
 from shapely.wkt import loads as sloads
 from shapely.wkt import dumps as sdumps
-from shapely.geometry.base import BaseGeometry
+from shapely.geometry.base import BaseGeometry, GeometrySequence
 from shapely import union, difference
 
 # ---------------------------------------
@@ -50,6 +50,8 @@ from shapely import union, difference
 # Used for solid polygons in Matplotlib
 # from descartes.patch import PolygonPatch
 # ---------------------------------------
+
+from typing import Any
 
 import logging
 import re
@@ -222,7 +224,7 @@ class ApertureMacro:
     @staticmethod
     def default2zero(n, mods):
         """
-        Pads the ``mods`` list with zeros resulting in an
+        Pads the ``mods`` list with zeros resulting in a
         list of length n.
 
         :param n:       Length of the resulting list.
@@ -540,6 +542,10 @@ class Geometry(object):
         # "geo_steps_per_circle": 128
     }
 
+    obj_options: dict[str, Any]
+    kind: str
+    multigeo: bool
+
     def __init__(self, app, geo_steps_per_circle=None):
         # Units (in or mm)
         self.app = app
@@ -547,7 +553,7 @@ class Geometry(object):
         self.decimals = self.app.decimals
 
         self.drawing_tolerance = 0.0
-        self.tools = None
+        self.tools: dict[str | int, dict[str, Any] | str] = {}
 
         # Final geometry: MultiPolygon or list (of geometry constructs)
         self.solid_geometry = None
@@ -580,15 +586,20 @@ class Geometry(object):
         # Attributes to be included in serialization
         self.ser_attrs = ["units", 'solid_geometry', 'follow_geometry', 'tools']
 
-    def plot_temp_shapes(self, element, color='red'):
+    def plot_temp_shapes(self, element: BaseGeometry | list[BaseGeometry], color='red'):
 
         try:
             for sub_el in element:
                 self.plot_temp_shapes(sub_el)
         except TypeError:  # Element is not iterable...
             # self.add_shape(shape=element, color=color, visible=visible, layer=0)
-            self.temp_shapes.add(tolerance=float(self.app.options["global_tolerance"]),
-                                 shape=element, color=color, visible=True, layer=0)
+            self.temp_shapes.add(
+                shape=element,
+                tolerance=float(self.app.options["global_tolerance"]),
+                color=color,
+                visible=True,
+                layer=0,
+            )
 
     def make_index(self):
         self.flatten()
@@ -803,7 +814,7 @@ class Geometry(object):
                         gmaxy = max(gmaxy, maxy_)
                 return gminx, gminy, gmaxx, gmaxy
             else:
-                # it's a Shapely object, return it's bounds
+                # it's a Shapely object, return its bounds
                 return obj.bounds
 
         if self.multigeo is True:
@@ -940,7 +951,7 @@ class Geometry(object):
         Returns all exteriors of polygons in geometry. Uses
         ``self.solid_geometry`` if geometry is not provided.
 
-        :param geometry: Shapely type or list or list of list of such.
+        :param geometry: Shapely type or list, or list of list of such.
         :return: List of paths constituting the exteriors
            of polygons in geometry.
         """
@@ -959,7 +970,7 @@ class Geometry(object):
 
         return exteriors
 
-    def flatten(self, geometry=None, reset=True, pathonly=False):
+    def flatten(self, geometry: BaseGeometry | list[BaseGeometry] | None = None, reset=True, pathonly=False):
         """
         Creates a list of non-iterable linear geometry objects.
         Polygons are expanded into its exterior and interiors if specified.
@@ -1196,7 +1207,7 @@ class Geometry(object):
         :param filename:    Path to the SVG file.
         :type filename:     str
         :param object_type: parameter passed further along
-        :param flip:        Flip the vertically.
+        :param flip:        Flip vertically.
         :type flip:         bool
         :param units:       FlatCAM units
         :return:            None
@@ -1534,8 +1545,18 @@ class Geometry(object):
 
         return geoms
 
-    def clear_polygon_seed(self, polygon_to_clear, tooldia, steps_per_circle, seedpoint=None, overlap=0.15,
-                           connect=True, contour=True, simplify_tol=0.0, prog_plot=False):
+    def clear_polygon_seed(
+            self,
+            polygon_to_clear: Polygon,
+            tooldia: int | float | str,
+            steps_per_circle: int,
+            seedpoint: Point | None = None,
+            overlap: float = 0.15,
+            connect: bool = True,
+            contour: bool = True,
+            simplify_tol: float = 0.0,
+            prog_plot: bool = False,
+    ):
         """
         Creates geometry inside a polygon for a tool to cover
         the whole area.
@@ -1552,6 +1573,7 @@ class Geometry(object):
         :param overlap:             Tool fraction overlap between passes
         :param connect:             Connect disjoint segment to minimize tool lifts
         :param contour:             Cut contour inside the polygon.
+        :param simplify_tol:        Simplification tolerance
         :param prog_plot:           boolean; if True use the progressive plotting
         :return:                    List of toolpaths covering polygon.
         :rtype:                     AppRTreeStorage | None
@@ -1615,7 +1637,7 @@ class Geometry(object):
         # Clean inside edges (contours) of the original polygon
         if contour:
             buffered_poly = autolist(polygon_to_clear.buffer(-tooldia / 2, int(steps_per_circle)))
-            buffered_poly = [x.simplify(simplify_tol) for x in buffered_poly]
+            buffered_poly: list[Polygon] = [x.simplify(simplify_tol) for x in buffered_poly]
             outer_edges = [x.exterior for x in buffered_poly]
 
             inner_edges = []
@@ -1648,8 +1670,17 @@ class Geometry(object):
 
         return geom_elems
 
-    def clear_polygon_lines(self, polygon, tooldia, steps_per_circle, overlap=0.15, connect=True, contour=True,
-                            simplify_tol=0.0, prog_plot=False):
+    def clear_polygon_lines(
+            self,
+            polygon: Polygon,
+            tooldia: int | float | str,
+            steps_per_circle: int,
+            overlap: float = 0.15,
+            connect: bool = True,
+            contour: bool = True,
+            simplify_tol: float = 0.0,
+            prog_plot: bool = False,
+    ):
         """
         Creates geometry inside a polygon for a tool to cover
         the whole area.
@@ -1663,6 +1694,7 @@ class Geometry(object):
         :param overlap:             Tool path overlap percentage.
         :param connect:             Connect lines to avoid tool lifts.
         :param contour:             Paint around the edges.
+        :param simplify_tol:        Simplification tolerance
         :param prog_plot:           boolean; if to use the progressive plotting
         :return:
         """
@@ -1834,15 +1866,15 @@ class Geometry(object):
         def get_pts(o):
             return [o.coords[0], o.coords[-1]]
 
-        def get_extrapolated_line(p1, p2):
-            """
-            Creates a line extrapolated in p1->p2 direction.
-            Get a line that extends the 'line' LineString toward our side.
-            """
-            EXTRAPOLATION_RATIO = 10
-            a = p1
-            b = (p1[0] + EXTRAPOLATION_RATIO * (p2[0] - p1[0]), p1[1] + EXTRAPOLATION_RATIO * (p2[1] - p1[1]))
-            return [a, b]
+        # def get_extrapolated_line(p1, p2):
+        #     """
+        #     Creates a line extrapolated in p1->p2 direction.
+        #     Get a line that extends the 'line' LineString toward our side.
+        #     """
+        #     EXTRAPOLATION_RATIO = 10
+        #     a = p1
+        #     b = (p1[0] + EXTRAPOLATION_RATIO * (p2[0] - p1[0]), p1[1] + EXTRAPOLATION_RATIO * (p2[1] - p1[1]))
+        #     return [a, b]
 
         def extend_line(p1: tuple, p2: tuple, extension_distance: float) -> list:
             # Compute the vector represented by the line
@@ -1907,7 +1939,7 @@ class Geometry(object):
             prepared_line = prepared_line.simplify(0)
         # ##########################################################################
         try:
-            margin_poly = polygon.buffer(-tooldia / 2.0, int(steps_per_circle))
+            margin_poly: BaseGeometry | list[BaseGeometry] = polygon.buffer(-tooldia / 2.0, int(steps_per_circle))
         except Exception:
             self.app.log.debug(
                 "camlib.Geometry.fill_with_lines() --> Could not buffer the Polygon, tool diameter too high")
@@ -1984,7 +2016,11 @@ class Geometry(object):
         lines_trimmed = unary_union(lines_trimmed)
 
         # Add lines to storage
-        lines_geometry = lines_trimmed.geoms if isinstance(lines_trimmed, MultiLineString) else lines_trimmed
+        lines_geometry: BaseGeometry | list[BaseGeometry] = (
+            lines_trimmed.geoms
+            if isinstance(lines_trimmed, MultiLineString)
+            else lines_trimmed
+        )
 
         try:
             for line_g in lines_geometry:
@@ -2091,7 +2127,7 @@ class Geometry(object):
         #
         # for shape in geolist:
         #     if shape is not None:
-        #         # Make LlinearRings into linestrings otherwise
+        #         # Make LinearRing's into LineString's otherwise
         #         # When chaining the coordinates path is messed up.
         #         storage.insert(LineString(shape))
         #         #storage.insert(shape)
@@ -2288,7 +2324,7 @@ class Geometry(object):
         """
         Converts the units of the object to ``units`` by scaling all
         the geometry appropriately. This call ``scale()``. Don't call
-        it again in descendents.
+        it again in descendants.
 
         :param obj_units:   "IN" or "MM"
         :type obj_units:    str
@@ -2658,7 +2694,14 @@ class Geometry(object):
         #     self.solid_geometry = affinity.skew(self.solid_geometry, angle_x, angle_y,
         #                                         origin=(px, py))
 
-    def buffer(self, distance, join, factor, only_exterior=False, muted=False):
+    def buffer(
+            self,
+            distance: float,
+            join,
+            factor: float,
+            only_exterior: bool = False,
+            muted: bool = False,
+    ):
         """
 
         :param distance:        if 'factor' is True then distance is the scale factor for each geometric element
@@ -2754,6 +2797,8 @@ class CNCjob(Geometry):
         "excellon_optimization_type": "B",
     }
 
+    multitool: bool
+
     def __init__(self, app,
                  units="in", kind="generic", tooldia=0.0,
                  z_cut=-0.002, z_move=0.1,
@@ -2807,7 +2852,7 @@ class CNCjob(Geometry):
         # but set directly before the actual usage of the method with obj.excellon_optimization_type = value
         self.excellon_optimization_type = 'No'
 
-        # if set True then the GCode generation will use UI; used in Excellon GVode for now
+        # if set True then the GCode generation will use UI; used in Excellon Gcode for now
         self.use_ui = False
 
         self.unitcode = {"IN": "G20", "MM": "G21"}
@@ -2831,13 +2876,13 @@ class CNCjob(Geometry):
         # Controls if the move from Z_Toolchange to Z_Move is done fast with G0 or normally with G1
         self.f_plunge = None
 
-        # Controls if the move from Z_Cutto Z_Move is done fast with G0 or G1 until zero and then G0 to Z_move
+        # Controls if the move from Z_Cut to Z_Move is done fast with G0 or G1 until zero and then G0 to Z_move
         self.f_retract = None
 
         # how much depth the probe can probe before error
         self.z_p_depth = z_p_depth if z_p_depth else None
 
-        # the feedrate(speed) with which the probel travel while probing
+        # the feedrate(speed) with which the probe travel while probing
         self.feedrate_probe = feedrate_probe if feedrate_probe else None
 
         self.spindlespeed = spindlespeed
@@ -2954,8 +2999,8 @@ class CNCjob(Geometry):
         attributes.update(self.postdata)
         attributes.update(kwargs)
         try:
-            returnvalue = fun(attributes)
-            return returnvalue
+            ret = fun(attributes)
+            return ret
         except Exception:
             self.app.log.error('Exception occurred within a preprocessor: ' + traceback.format_exc())
             return ''
@@ -3078,7 +3123,6 @@ class CNCjob(Geometry):
             # Only one route here; otherwise iterate from 0 to routing.vehicles() - 1.
             route_number = 0
             node = routing.Start(route_number)
-            start_node = node
 
             while not routing.IsEnd(node):
                 if self.app.abort_flag:
@@ -3185,7 +3229,7 @@ class CNCjob(Geometry):
             must_visit.remove(nearest)
         return path
 
-    def geo_optimized_rtree(self, geometry):
+    def geo_optimized_rtree(self, geometry: BaseGeometry | list[BaseGeometry]):
         locations = []
 
         # ## Index first and last points in paths. What points to index.
@@ -3201,14 +3245,21 @@ class CNCjob(Geometry):
         self.app.inform.emit(_("Indexing geometry before generating G-Code..."))
 
         work_geo = geometry.geoms if isinstance(geometry, (MultiPolygon, MultiLineString)) else geometry
-        for geo_shape in work_geo:
-            if self.app.abort_flag:
-                # graceful abort requested by the user
-                raise grace
+        try:
+            for geo_shape in work_geo:
+                if self.app.abort_flag:
+                    # graceful abort requested by the user
+                    raise grace
 
-            if geo_shape is not None:
+                if geo_shape is not None:
+                    try:
+                        storage.insert(geo_shape)
+                    except Exception:
+                        pass
+        except TypeError:
+            if work_geo is not None:
                 try:
-                    storage.insert(geo_shape)
+                    storage.insert(work_geo)
                 except Exception:
                     pass
 
@@ -3330,7 +3381,7 @@ class CNCjob(Geometry):
         self.app.log.debug("camlib.CNCJob.excellon_tool_gcode_gen() -> Generating GCode for tool: %s" % str(tool))
 
         # detect if GCode is segmented for autolevelling or not
-        # it does not matter for the Excellon codes because we are not going to autolevel GCode out of Excellon
+        # it does not matter for the Excellon codes because we are not going to autolevel GCode out of Excellon,
         # but it is here for uniformity between the Geometry and Excellon objects
         if self.seg_x > 0 and self.seg_y > 0 and self.is_segmented_gcode is False:
             self.is_segmented_gcode = True
@@ -3955,11 +4006,20 @@ class CNCjob(Geometry):
 
         geo_storage = {}
         for geo in temp_solid_geometry:
-            if geo is not None and isinstance(geo, (MultiPolygon, MultiLineString, LineString, LinearRing)):
+            if geo is None:
+                continue
+            if isinstance(geo, (LineString, LinearRing)):
                 try:
                     geo_storage[geo.coords[0]] = geo
                 except Exception:
                     pass
+            elif isinstance(geo, (MultiPolygon, MultiLineString)):
+                for g in geo.geoms:
+                    try:
+                        geo_storage[g.coords[0]] = g
+                    except Exception:
+                        pass
+
         locations = list(geo_storage.keys())
 
         if opt_type == 'M':
@@ -4207,7 +4267,7 @@ class CNCjob(Geometry):
                                                    "in the format (x, y) but now there is only one value, not two."))
             return 'fail'
 
-        # Prepprocessor
+        # Pre-processor
         self.pp_excellon = self.app.preprocessors[self.pp_excellon_name]
         p = self.pp_excellon
 
@@ -4506,7 +4566,7 @@ class CNCjob(Geometry):
 
                 self.coordinates_type = self.app.options["cncjob_coords_type"]
                 if self.coordinates_type == "G90":
-                    # Drillling! for Absolute coordinates type G90
+                    # Drilling! for Absolute coordinates type G90
                     # variables to display the percentage of work done
                     geo_len = len(optimized_path)
 
@@ -4514,6 +4574,8 @@ class CNCjob(Geometry):
                     self.app.log.warning("Number of drills for which to generate GCode: %s" % str(geo_len))
 
                     loc_nr = 0
+                    locx = 0
+                    locy = 0
                     for point in optimized_path:
                         if self.app.abort_flag:
                             # graceful abort requested by the user
@@ -4739,7 +4801,7 @@ class CNCjob(Geometry):
 
             self.coordinates_type = self.app.options["cncjob_coords_type"]
             if self.coordinates_type == "G90":
-                # Drillling! for Absolute coordinates type G90
+                # Drilling! for Absolute coordinates type G90
                 # variables to display the percentage of work done
                 geo_len = len(optimized_path)
 
@@ -4872,10 +4934,10 @@ class CNCjob(Geometry):
             end_gcode = self.doformat(p.spindle_stop_code)
             end_gcode += self.doformat(p.end_code, x=0, y=0)
             try:
-                self.tools[one_tool]['gcode'] += end_gcode
+                self.tools[one_tool]['gcode'] += end_gcode      # noqa
             except KeyError:
                 # just a hack because I am lazy and I don't want to fix the Tcl command drillcncjob which needs this
-                self.tools[str(one_tool)]['gcode'] += end_gcode
+                self.tools[str(one_tool)]['gcode'] += end_gcode     # noqa
 
         if used_excellon_optimization_type == 'M':
             self.app.log.debug("The total travel distance with OR-TOOLS Metaheuristics is: %s" % str(measured_distance))
@@ -4956,7 +5018,7 @@ class CNCjob(Geometry):
         :param toolchangexy:
         :param extracut:            Adds (or not) an extra cut at the end of each path overlapping the
                                     first point in path to ensure complete copper removal
-        :param extracut_length:     Extra cut legth at the end of the path
+        :param extracut_length:     Extra cut length at the end of the path
         :param startz:
         :param endz:
         :param endxy:
@@ -5251,15 +5313,37 @@ class CNCjob(Geometry):
         )
         return self.gcode
 
-    def generate_from_geometry_2(self, geo_obj, append=True, tooldia=None, offset=0.0, tolerance=0, z_cut=None,
-                                 z_move=None, feedrate=None, feedrate_z=None, feedrate_rapid=None, spindlespeed=None,
-                                 spindle_dir='CW', dwell=False, dwelltime=None,
-                                 laser_min_power=0.0,
-                                 laser_on_code="M03",
-                                 multidepth=False, depthpercut=None,
-                                 toolchange=False, toolchangez=None, toolchangexy="0.0, 0.0", extracut=False,
-                                 extracut_length=None, startz=None, endz=None, endxy='', pp_geometry_name=None,
-                                 tool_no=1, is_first=False):
+    def generate_from_geometry_2(
+            self,
+            geo_obj,
+            append=True,
+            tooldia=None,
+            offset=0.0,
+            tolerance=0,
+            z_cut=None,
+            z_move=None,
+            feedrate=None,
+            feedrate_z=None,
+            feedrate_rapid=None,
+            spindlespeed=None,
+            spindle_dir='CW',
+            dwell=False,
+            dwelltime=None,
+            laser_min_power=0.0,
+            laser_on_code="M03",
+            multidepth=False,
+            depthpercut=None,
+            toolchange=False,
+            toolchangez=None,
+            toolchangexy="0.0, 0.0",
+            extracut=False,
+            extracut_length=None,
+            startz=None, endz=None,
+            endxy='',
+            pp_geometry_name=None,
+            tool_no=1,
+            is_first=False,
+    ):
         """
         Second algorithm to generate from Geometry.
 
@@ -5281,7 +5365,7 @@ class CNCjob(Geometry):
         :param spindle_dir:
         :param dwell:
         :param dwelltime:
-        :param laser_min_power:     Float value. Used when the preprocessor cotanins 'laser' in its name. Control
+        :param laser_min_power:     Float value. Used when the preprocessor contains 'laser' in its name. Control
                                     the power when the laser is `OFF`
         :param multidepth:          If True, use multiple passes to reach the desired depth.
         :param depthpercut:         Maximum depth in each pass.
@@ -5454,14 +5538,20 @@ class CNCjob(Geometry):
             if toolchangexy == '':
                 self.xy_toolchange = None
             else:
-                self.xy_toolchange = re.sub(r'[()\[\]]', '', str(toolchangexy)) if self.xy_toolchange else None
+                self.xy_toolchange = (
+                    re.sub(r'[()\[\]]', '', str(toolchangexy))
+                    if self.xy_toolchange
+                    else None
+                )
 
                 if self.xy_toolchange and self.xy_toolchange != '':
                     self.xy_toolchange = [float(eval(a)) for a in self.xy_toolchange.split(",")]
 
-                if len(self.xy_toolchange) < 2:
-                    self.app.inform.emit('[ERROR] %s' % _("The Toolchange X,Y format has to be (x, y)."))
-                    return 'fail'
+                    if len(self.xy_toolchange) < 2:
+                        self.app.inform.emit(
+                            '[ERROR] %s' % _("The Toolchange X,Y format has to be (x, y).")
+                        )
+                        return 'fail'
         except Exception as e:
             self.app.log.error("camlib.CNCJob.generate_from_geometry_2() --> %s" % str(e))
             pass
@@ -5838,7 +5928,7 @@ class CNCjob(Geometry):
                     # geo.coords = list(geo.coords)[::-1] # Shapely 2.0
                     geo = LineString(list(geo.coords)[::-1])
 
-                self.gcode += self.create_soldepaste_gcode(geo, p=p, old_point=current_pt)
+                self.gcode += self.create_repasted_gcode(geo, p=p, old_point=current_pt)
                 current_pt = geo.coords[-1]
                 pt, geo = storage.nearest(current_pt)  # Next
 
@@ -5849,7 +5939,7 @@ class CNCjob(Geometry):
         except StopIteration:  # Nothing found in storage.
             pass
 
-        self.app.log.debug("Finishing SolderPste G-Code... %s paths traced." % path_count)
+        self.app.log.debug("Finishing SolderPaste G-Code... %s paths traced." % path_count)
         self.app.inform.emit(
             '%s... %s %s.' % (_("Finished SolderPaste G-Code generation"), str(path_count), _("paths traced"))
         )
@@ -5860,7 +5950,7 @@ class CNCjob(Geometry):
 
         return self.gcode
 
-    def create_soldepaste_gcode(self, geometry, p, old_point=(0, 0)):
+    def create_repasted_gcode(self, geometry, p, old_point=(0, 0)):
         gcode = ''
         path = geometry.coords
 
@@ -6119,16 +6209,16 @@ class CNCjob(Geometry):
 
         elif self.pp_solderpaste_name is not None:
             if 'Paste' in self.pp_solderpaste_name:
-                match_paste = re.search(r"X([\+-]?\d+.[\+-]?\d+)\s*Y([\+-]?\d+.[\+-]?\d+)", gline)
+                match_paste = re.search(r"X([+-]?\d+.[+-]?\d+)\s*Y([+-]?\d+.[+-]?\d+)", gline)
                 if match_paste:
                     command['X'] = float(match_paste.group(1).replace(" ", ""))
                     command['Y'] = float(match_paste.group(2).replace(" ", ""))
         else:
-            match = re.search(r'^\s*([A-Z])\s*([\+\-\.\d\s]+)', gline)
+            match = re.search(r'^\s*([A-Z])\s*([+\-.\d\s]+)', gline)
             while match:
                 command[match.group(1)] = float(match.group(2).replace(" ", ""))
                 gline = gline[match.end():]
-                match = re.search(r'^\s*([A-Z])\s*([\+\-\.\d\s]+)', gline)
+                match = re.search(r'^\s*([A-Z])\s*([+\-.\d\s]+)', gline)
         return command
 
     def gcode_parse(self, force_parsing=None, tool_data=None):
@@ -6508,7 +6598,7 @@ class CNCjob(Geometry):
     #
     #     return fig
 
-    def plot2(self, tooldia=None, dpi=75, margin=0.1, gcode_parsed=None,
+    def plot2(self, tooldia=None, dpi=75, margin=0.1, gcode_parsed: str = None,
               color=None, alpha={"T": 0.3, "C": 1.0}, tool_tolerance=0.0005, obj=None, visible=False, kind='all'):
         """
         Plots the G-code job onto the given axes.
@@ -6549,7 +6639,7 @@ class CNCjob(Geometry):
         if tooldia is None:
             tooldia = self.tooldia
 
-        # this should be unlikely unless when upstream the tooldia is a tuple made by one dia and a comma like (2.4,)
+        # this should be unlikely unless when upstream the tooldia is a tuple made by one dia and a comma like (2.4)
         if isinstance(tooldia, list):
             tooldia = tooldia[0] if tooldia[0] is not None else self.tooldia
 
@@ -6559,13 +6649,13 @@ class CNCjob(Geometry):
                 if not geo:
                     continue
                 if kind == 'all':
-                    batch.append({'shape': geo['geom'], 'color': color[geo['kind'][0]][1]})
+                    batch.append({'shape': geo['geom'], 'color': color[geo['kind'][0]][1]})     # noqa
                 elif kind == 'travel':
-                    if geo['kind'][0] == 'T':
-                        batch.append({'shape': geo['geom'], 'color': color['T'][1]})
+                    if geo['kind'][0] == 'T':   # noqa
+                        batch.append({'shape': geo['geom'], 'color': color['T'][1]})    # noqa
                 elif kind == 'cut':
-                    if geo['kind'][0] == 'C':
-                        batch.append({'shape': geo['geom'], 'color': color['C'][1]})
+                    if geo['kind'][0] == 'C':   # noqa
+                        batch.append({'shape': geo['geom'], 'color': color['C'][1]})    # noqa
             if batch:
                 obj.add_shapes_batch(batch, visible=visible)
         else:
@@ -6579,8 +6669,8 @@ class CNCjob(Geometry):
                     if not geo:
                         continue
 
-                    if geo['kind'][0] == 'T':
-                        start_position = geo['geom'].coords[0]
+                    if geo['kind'][0] == 'T':   # noqa
+                        start_position = geo['geom'].coords[0]  # noqa
 
                         if tooldia not in obj.annotations_dict:
                             obj.annotations_dict[tooldia] = {
@@ -6592,7 +6682,7 @@ class CNCjob(Geometry):
                             obj.annotations_dict[tooldia]['pos'].append(start_position)
                             obj.annotations_dict[tooldia]['text'].append(str(path_num))
 
-                        end_position = geo['geom'].coords[-1]
+                        end_position = geo['geom'].coords[-1]   # noqa
 
                         if tooldia not in obj.annotations_dict:
                             obj.annotations_dict[tooldia] = {
@@ -6608,10 +6698,10 @@ class CNCjob(Geometry):
                     if self.obj_options['type'].lower() == 'excellon':
                         try:
                             # if the geos are travel lines
-                            if geo['kind'][0] == 'T':
+                            if geo['kind'][0] == 'T':   # noqa
                                 poly = geo['geom'].buffer((tooldia / 1.99999999), self.steps_per_circle)
                             else:
-                                poly = Polygon(geo['geom'])
+                                poly = Polygon(geo['geom'])     # noqa
 
                             poly = poly.simplify(tool_tolerance)
                         except Exception:
@@ -6619,25 +6709,25 @@ class CNCjob(Geometry):
                             continue
                     else:
                         # plot the geometry of any objects other than Excellon
-                        poly = geo['geom'].buffer((tooldia / 1.99999999), self.steps_per_circle)
+                        poly = geo['geom'].buffer((tooldia / 1.99999999), self.steps_per_circle)    # noqa
                         poly = poly.simplify(tool_tolerance)
 
                     # Collect into batch instead of add_shape
                     if kind == 'all':
                         batch.append({
                             'shape': poly,
-                            'color': color[geo['kind'][0]][1],
-                            'face_color': color[geo['kind'][0]][0],
-                            'layer': 1 if geo['kind'][0] == 'C' else 2
+                            'color': color[geo['kind'][0]][1],  # noqa
+                            'face_color': color[geo['kind'][0]][0], # noqa
+                            'layer': 1 if geo['kind'][0] == 'C' else 2  # noqa
                         })
                     elif kind == 'travel':
-                        if geo['kind'][0] == 'T':
+                        if geo['kind'][0] == 'T':   # noqa
                             batch.append({
                                 'shape': poly, 'color': color['T'][1],
                                 'face_color': color['T'][0], 'layer': 2
                             })
                     elif kind == 'cut':
-                        if geo['kind'][0] == 'C':
+                        if geo['kind'][0] == 'C':   # noqa
                             batch.append({
                                 'shape': poly, 'color': color['C'][1],
                                 'face_color': color['C'][0], 'layer': 1
@@ -7307,7 +7397,7 @@ class CNCjob(Geometry):
         # This way we can add different formatting / colors to both
         cuts = []
         travels = []
-        cutsgeom = ''
+        cutsgeom: str = ''
         travelsgeom = ''
 
         for g in self.gcode_parsed:
@@ -7621,11 +7711,12 @@ class CNCjob(Geometry):
                 self.el_count = 0
 
                 # scale gcode_parsed
-                for g in v['gcode_parsed']:
+                g_code_geos_dicts = v['gcode_parsed']
+                for g in g_code_geos_dicts:
                     try:
-                        g['geom'] = affinity.scale(g['geom'], xfactor, yfactor, origin=(px, py))
+                        g['geom'] = affinity.scale(g['geom'], xfactor, yfactor, origin=(px, py))        # noqa
                     except AttributeError:
-                        return g['geom']
+                        return g['geom']    # noqa
 
                     self.el_count += 1
                     disp_number = int(np.interp(self.el_count, [0, self.geo_len], [0, 100]))
@@ -7633,7 +7724,8 @@ class CNCjob(Geometry):
                         self.app.proc_container.update_view_text(' %d%%' % disp_number)
                         self.old_disp_number = disp_number
 
-                v['solid_geometry'] = unary_union([geo['geom'] for geo in v['gcode_parsed']])
+                g_code_geos: list[BaseGeometry | MultiPolygon] = [geo['geom'] for geo in v['gcode_parsed']] # noqa
+                v['solid_geometry'] = unary_union(g_code_geos)
         self.create_geometry()
         self.app.proc_container.new_text = ''
 
@@ -7934,7 +8026,10 @@ def translate_geometry(obj, dx, dy):
         return obj
 
 
-def flatten_shapely_geometry(geometry, simplify_tolerance: float = 0.0) -> list:
+def flatten_shapely_geometry(
+        geometry: BaseGeometry | list[BaseGeometry] | GeometrySequence,
+        simplify_tolerance: float = 0.0,
+) -> list:
     """
 
     :param geometry:
@@ -8491,7 +8586,7 @@ class AppRTree(object):
         self.obj2points = []
 
         # Index is index in rtree, value is index of
-        # object in obj2points.
+        # object in self.obj2points
         self.points2obj = []
 
         self.get_points = lambda go: go.coords

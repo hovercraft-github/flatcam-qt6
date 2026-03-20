@@ -8,9 +8,44 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+20.03.2026
+
+flatcam.py:
+- Changed application exit to use os._exit() instead of sys.exit() to prevent Windows 0xC0000005 crashes caused by Qt/VisPy C++ object destruction during Python GC
+  appMain.py:
+- Fixed systray icon crash by checking self.trayIcon is not None before showing
+- Fixed multiprocessing pool cleanup: changed terminate() to close() + join() for graceful shutdown
+- Improved ArgsThread shutdown: added pipe close mechanism to unblock listener.accept()
+- Added explicit VisPy canvas resource release before QApplication quit
+- Enhanced thread termination with 3-second wait and forced terminate if still running
+- Removed redundant close_command() call
+- Fixed double-click selection: re-select object if toggled off, removed unnecessary selection shape deletion
+- Added version check validation to prevent crashes when version is not numeric
+- Code formatting improvements
+
+camlib.py:
+- Added type hints throughout (Geometry, CNCjob classes)
+- Fixed typos: "Punch gerber" → "Punch Gerber", "extracut_length" → "extracut_length", "probel" → "probe", "soldepaste" → "repasted"
+- Added GeometrySequence import for type annotations
+- Fixed clear_polygon_seed() and clear_polygon_lines() method signatures with proper type hints
+- Improved geo_optimized_rtree() with better exception handling
+- Fixed coordinate extraction for MultiLineString/MultiPolygon in path optimization
+- Added proper handling for None geometries in geo_storage processing
+- Fixed regex patterns for GCode parsing (removed unnecessary escape characters)
+- Added noqa comments for legitimate type comparisons
+- Code reformatting and cleanup
+
+ToolPaint/PaintGen.py:
+- Massive refactoring: extracted worker logic into separate methods (_create_params, _parse_tool_diameters, _find_tool_uid, _get_params, _buffer_geometry, _process_polygon, _simplify_geometry, _update_progress)
+- Improved code organization and readability
+- Better separation of concerns
+  ToolNCC/NccGen.py:
+- Fixed typo: "sutracted" → "subtracted"
+
 18.03.2026 
 
--ToolPaint: more refactoring
+- ToolPaint: more refactoring
+- camlib: some type hints and reformatting
 
 17.03.2026
 

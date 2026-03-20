@@ -2366,7 +2366,7 @@ class NccGen:
 
                             # here we store the poly's already processed in the original geometry by the current tool
                             # into cleared_by_last_tool list
-                            # this will be sutracted from the original geometry_to_be_cleared and make data for
+                            # this will be subtracted from the original geometry_to_be_cleared and make data for
                             # the next tool
                             buffer_value = tool_used / 2
                             for p in cleared_area:

@@ -178,8 +178,8 @@ if __name__ == '__main__':
     timer.timeout.connect(lambda: None)
     timer.start(100)
 
-    try:
-        sys.exit(app.exec())
-    except SystemError:
-        pass
-    # app.exec()
+    # Use os._exit() after the event loop ends to avoid Python GC destroying
+    # Qt/VisPy C++ objects in unpredictable order, which causes 0xC0000005 on Windows.
+    # All important cleanup (preferences, threads, pool) is done in quit_application().
+    ret = app.exec()
+    os._exit(ret)

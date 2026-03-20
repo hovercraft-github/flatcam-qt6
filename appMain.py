@@ -1354,7 +1354,7 @@ class App(QtCore.QObject):
             else:
                 self.ui.show()
 
-            if self.options["global_systray_icon"]:
+            if self.options["global_systray_icon"] and self.trayIcon is not None:
                 self.trayIcon.show()
         else:
             try:
@@ -1636,7 +1636,7 @@ class App(QtCore.QObject):
         :return: None
         """
         try:
-            self.pool.terminate()
+            self.pool.close()
             self.pool.join()
         except (ValueError, AttributeError):
             pass
@@ -2722,8 +2722,9 @@ class App(QtCore.QObject):
             elif edited_obj.kind == 'cncjob':
                 self.gcode_editor.deactivate()
             else:
-                self.inform.emit('[WARNING_NOTCL] %s' %
-                                 _("Select a Gerber, Geometry, Excellon or CNCJob Object to update."))
+                self.inform.emit(
+                    '[WARNING_NOTCL] %s' % _("Select a Gerber, Geometry, Excellon or CNCJob Object to update.")
+                )
                 return
 
         self.post_edit_sig.emit()
@@ -3859,8 +3860,18 @@ class App(QtCore.QObject):
         self.autosave_timer.stop()
 
         if sys.platform == 'win32':
-            self.new_launch.stop.emit()     # noqa
-            # https://forum.qt.io/topic/108777/stop-a-loop-in-object-that-has-been-moved-to-a-qthread/7
+            # Set thread_exit directly — safe from main thread (GIL protects bool assignment)
+            self.new_launch.thread_exit = True
+            # Unblock listener.accept() by connecting to the pipe and sending 'close'
+            # serve() checks for msg == 'close' to break its loop
+            try:
+                from multiprocessing.connection import Client as MpClient
+                _conn = MpClient(*ArgsThread.address)
+                _conn.send('close')
+                _conn.close()
+                self.log.debug("ArgThread pipe close sent OK")
+            except Exception as e:
+                self.log.debug("ArgThread pipe close FAILED: %s" % str(e))
             if self.listen_th.isRunning():
                 self.listen_th.requestInterruption()
                 self.log.debug("ArgThread QThread requested an interruption.")
@@ -3917,6 +3928,13 @@ class App(QtCore.QObject):
             self.plotcanvas.graph_event_disconnect(self.mdc)
             self.plotcanvas.graph_event_disconnect(self.kp)
 
+        # Release VisPy OpenGL resources early so the GL thread has time to
+        # fully exit before QApplication.quit() processes the quit event
+        try:
+            self.plotcanvas.close()
+        except Exception:
+            pass
+
         if self.cmd_line_headless != 1:
             # save app state to file
             stgs = QSettings("Open Source", "FlatCAM_EVO")
@@ -3953,7 +3971,11 @@ class App(QtCore.QObject):
             # del self.new_launch
             if sys.platform == 'win32':
                 self.listen_th.quit()
-                self.listen_th.wait(1000)
+                self.listen_th.wait(3000)
+                if self.listen_th.isRunning():
+                    self.log.warning("ArgsThread still running after wait, terminating.")
+                    self.listen_th.terminate()
+                    self.listen_th.wait(1000)
         except Exception as e:
             if silent is False:
                 self.log.error("App.quit_application() --> %s" % str(e))
@@ -3972,11 +3994,6 @@ class App(QtCore.QObject):
         # self.close_app_signal.emit()
         # sys.exit(0)
         QtWidgets.QApplication.quit()
-        if sys.platform == 'win32':
-            try:
-                self.new_launch.close_command()
-            except Exception:
-                pass
 
     @staticmethod
     def kill_app():
@@ -6146,13 +6163,18 @@ class App(QtCore.QObject):
             # it was a double click
             if self.doubleclick is True:
                 self.doubleclick = False
+
+                # The 1st mouse_release of the double-click already ran select_objects()
+                # which may have toggled the object OFF. Re-select so double-click
+                # always leaves the object selected.
+                if not self.collection.get_selected():
+                    self.select_objects()
+
                 if self.collection.get_selected():
                     self.ui.notebook.setCurrentWidget(self.ui.properties_tab)
                     if self.ui.splitter.sizes()[0] == 0:
                         self.ui.splitter.setSizes([1, 1])
                     try:
-                        # delete the selection shape(S) as it may be in the way
-                        self.delete_selection_shape()
                         self.delete_hover_shape()
                     except Exception as e:
                         self.log.error("App.on_mouse_click_release_over_plot() double click --> Error: %s" % str(e))
@@ -7428,6 +7450,8 @@ class App(QtCore.QObject):
             self.log.warning("Version check response has invalid 'version' value.")
             return
 
+        if not isinstance(self.version, (int, float)):
+            return
         if self.version >= data_version:
             self.log.debug("The application is up to date!")
             self.inform.emit('[success] %s' % _("The application is up to date!"))
