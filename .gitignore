@@ -13,3 +13,7 @@ build/
 /.claude/
 /.planning/
 /.worktrees/
+
+# Git worktrees
+.worktrees/
+
