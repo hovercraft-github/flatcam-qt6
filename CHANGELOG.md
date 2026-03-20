@@ -8,6 +8,13 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+21.03.2026
+
+appMain.py:
+
+- updated the splash screen and rescaled it to 622x344
+- updated the version strings to reflect the current year
+
 20.03.2026
 
 flatcam.py:

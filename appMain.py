@@ -195,7 +195,7 @@ class App(QtCore.QObject):
     # ###############################################################################################################
     version = "Unstable"
     # version = 1.0
-    version_date = "2023/6/30"
+    version_date = "2026/5/01"
     beta = True
     engine = '3D'
 
@@ -704,8 +704,14 @@ class App(QtCore.QObject):
 
         if show_splash and self.cmd_line_headless != 1:
             splash_pix = QtGui.QPixmap(self.resource_location + '/splash.png')
+            splash_pix = splash_pix.scaled(
+                QtCore.QSize(622, 344),  # You can set this to your desired width and height
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation
+            )
+
             # self.splash = QtWidgets.QSplashScreen(splash_pix, Qt.WindowType.WindowStaysOnTopHint)
-            self.splash = QtWidgets.QSplashScreen(splash_pix)
+            self.splash = QtWidgets.QSplashScreen(splash_pix, Qt.WindowType.SplashScreen)
             # self.splash.setMask(splash_pix.mask())
 
             # move splashscreen to the current monitor
