@@ -314,6 +314,22 @@ class App(QtCore.QObject):
 
         super().__init__()
 
+        # Store qapp reference FIRST before any setup methods
+        self.qapp = qapp
+
+        self._setup_logging()
+        self._setup_state_variables()
+        self._setup_paths_and_config()
+        self._setup_defaults_and_preferences(user_defaults=user_defaults)
+        self._setup_gui()
+        self._setup_canvas_and_plotting()
+        self._setup_tools_and_editors()
+        self._setup_system_integration()
+        self._setup_signal_connections()
+        self._setup_startup()
+
+    def _setup_logging(self):
+        """Phase 1: Setup logging, qapp reference, and editor stubs."""
         # #############################################################################################################
         # ######################################### LOGGING ###########################################################
         # #############################################################################################################
@@ -327,8 +343,6 @@ class App(QtCore.QObject):
 
         self.log.info("Starting the application...")
 
-        self.qapp = qapp
-
         # App Editors will be instantiated further below
         self.exc_editor = None
         self.grb_editor = None
@@ -338,6 +352,8 @@ class App(QtCore.QObject):
         # when True, the app has to return from any thread
         self.abort_flag = False
 
+    def _setup_state_variables(self):
+        """Phase 1: Setup all state variables for global usage."""
         # ###########################################################################################################
         # ############################################ Data #########################################################
         # ###########################################################################################################
@@ -467,6 +483,8 @@ class App(QtCore.QObject):
         # this is a flag to signal to other tools that the ui tool tab is locked and not accessible
         self.plugin_tab_locked = False
 
+    def _setup_paths_and_config(self):
+        """Phase 1: Setup paths, config files, and platform-specific settings."""
         # ############################################################################################################
         # ################# Setup the listening thread for another instance launching with args ######################
         # ############################################################################################################
@@ -601,6 +619,8 @@ class App(QtCore.QObject):
 
         os.chdir(self.app_home)
 
+    def _setup_defaults_and_preferences(self, user_defaults=True):
+        """Phase 1: Setup defaults, preferences storage, themes, and object classes."""
         # ############################################################################################################
         # ################################# DEFAULTS - PREFERENCES STORAGE ###########################################
         # ############################################################################################################
@@ -640,6 +660,9 @@ class App(QtCore.QObject):
                 theme = 'light'
 
         self.options["global_theme"] = theme
+
+        # Cache theme for use in _setup_gui (avoids passing theme as parameter)
+        self._current_theme = theme
 
         self.app_units = self.options["units"]
         self.default_units = self.defaults["units"]
@@ -690,6 +713,8 @@ class App(QtCore.QObject):
             # This will write the setting to the platform specific storage.
             del q_settings
 
+    def _setup_gui(self):
+        """Phase 1: Setup GUI, splash screen, languages, preprocessors, main UI, shell, and preferences."""
         # ###########################################################################################################
         # ###################################### Setting the Splash Screen ##########################################
         # ###########################################################################################################
@@ -713,6 +738,9 @@ class App(QtCore.QObject):
 
             # self.splash = QtWidgets.QSplashScreen(splash_pix, Qt.WindowType.WindowStaysOnTopHint)
             self.splash = QtWidgets.QSplashScreen(splash_pix, Qt.WindowType.SplashScreen)
+
+            # Store for use in other setup methods
+            self._show_splash = show_splash
             # self.splash.setMask(splash_pix.mask())
 
             # move splashscreen to the current monitor
@@ -820,13 +848,14 @@ class App(QtCore.QObject):
         if self.options["global_cursor_color_enabled"]:
             self.cursor_color_3D = self.options["global_cursor_color"]
         else:
-            if (theme == 'light' or theme == 'default') and not self.options["global_dark_canvas"]:
+            if (self._current_theme == 'light' or self._current_theme == 'default') \
+                    and not self.options["global_dark_canvas"]:
                 self.cursor_color_3D = 'black'
             else:
                 self.cursor_color_3D = 'gray'
 
         # update the 'options' dict with the setting in QSetting
-        self.options['global_theme'] = theme
+        self.options['global_theme'] = self.options["global_theme"]
 
         # ########################
         self.ui = MainGUI(self)
@@ -941,7 +970,7 @@ class App(QtCore.QObject):
         self.app_cursor = None
         self.hover_shapes = None
 
-        if show_splash:
+        if self._show_splash:
             self.splash.showMessage(_("The application is initializing ...\n"
                                       "Canvas initialization started."),
                                     alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
@@ -994,7 +1023,7 @@ class App(QtCore.QObject):
         self.used_time = end_plot_time - start_plot_time
         self.log.debug("Finished Canvas initialization in %s seconds." % str(self.used_time))
 
-        if show_splash:
+        if self._show_splash:
             self.splash.showMessage('%s: %ssec' % (_("The application is initializing ...\n"
                                                      "Canvas initialization started.\n"
                                                      "Canvas initialization finished in"), '%.2f' % self.used_time),
@@ -1023,6 +1052,8 @@ class App(QtCore.QObject):
         # Sets up FlatCAMObj, FCProcess and FCProcessContainer.
         self.setup_default_properties_tab()
 
+    def _setup_canvas_and_plotting(self):
+        """Phase 1: Setup tool/editor stubs, bookmarks, tools database, shell, editors, and exclusion areas."""
         # ###########################################################################################################
         # ########################################## Tools and Plugins ##############################################
         # ###########################################################################################################
@@ -1159,6 +1190,8 @@ class App(QtCore.QObject):
         # this is calculated in the class above (somehow?)
         self.options["root_folder_path"] = self.app_home
 
+    def _setup_tools_and_editors(self):
+        """Phase 1: Setup first-run section (must run after _setup_canvas_and_plotting for editors)."""
         # ###########################################################################################################
         # ##################################### FIRST RUN SECTION ###################################################
         # ################################ It's done only once after install   #####################################
@@ -1178,6 +1211,8 @@ class App(QtCore.QObject):
             self.log.debug("-> First Run: Updating the Defaults file with Factory Defaults")
             self.preferencesUiManager.save_defaults(silent=True)
 
+    def _setup_system_integration(self):
+        """Phase 1: Setup system tray and recent items."""
         # ###########################################################################################################
         # ############################################### SYS TRAY ##################################################
         # ###########################################################################################################
@@ -1201,6 +1236,8 @@ class App(QtCore.QObject):
         # ###########################################################################################################
         self.setup_recent_items()
 
+    def _setup_signal_connections(self):
+        """Phase 1: Setup all signal connections."""
         # ###########################################################################################################
         # ###########################################################################################################
         # ############################################# Signal handling #############################################
@@ -1335,6 +1372,8 @@ class App(QtCore.QObject):
 
         self.log.debug("Finished connecting Signals.")
 
+    def _setup_startup(self):
+        """Phase 1: Show GUI and process startup arguments."""
         # ###########################################################################################################
         # ##################################### Finished the CONSTRUCTOR ############################################
         # ###########################################################################################################
@@ -1348,7 +1387,148 @@ class App(QtCore.QObject):
 
         # if the app is not started as headless, show it
         if self.cmd_line_headless != 1:
-            if show_splash:
+            if self.splash:
+                # finish the splash
+                self.splash.finish(self.ui)
+
+            mgui_settings = QSettings("Open Source", "FlatCAM_EVO")
+            if mgui_settings.contains("maximized_gui"):
+                maximized_ui = mgui_settings.value('maximized_gui', type=bool)
+                if maximized_ui is True:
+                    self.ui.showMaximized()
+                else:
+                    self.ui.show()
+            else:
+                self.ui.show()
+
+            if self.options["global_systray_icon"] and self.trayIcon is not None:
+                self.trayIcon.show()
+        else:
+            try:
+                self.trayIcon.show()
+            except Exception as t_err:
+                self.log.error("App.__init__() Running headless and trying to show the systray got: %s" % str(t_err))
+            self.log.warning("*******************  RUNNING HEADLESS  *******************")
+
+        # ###########################################################################################################
+        # ######################################## START-UP ARGUMENTS ###############################################
+        # ###########################################################################################################
+
+        # test if the program was started with a script as parameter
+        if self.cmd_line_shellvar:
+            try:
+                cnt = 0
+                command_tcl = 0
+                for i in self.cmd_line_shellvar.split(','):
+                    if i is not None:
+                        # noinspection PyBroadException
+                        try:
+                            command_tcl = eval(i)
+                        except Exception:
+                            command_tcl = i
+
+                    command_tcl_formatted = 'set shellvar_{nr} "{cmd}"'.format(cmd=str(command_tcl), nr=str(cnt))
+
+                    cnt += 1
+
+                    # if there are Windows paths then replace the path separator with a Unix like one
+                    if sys.platform == 'win32':
+                        command_tcl_formatted = command_tcl_formatted.replace('\\', '/')
+                    self.shell.exec_command(command_tcl_formatted, no_echo=True)
+            except Exception as ext:
+                print("ERROR: ", ext)
+                sys.exit(2)
+
+        if self.cmd_line_shellfile:
+            if self.cmd_line_headless != 1:
+                if self.ui.shell_dock.isHidden():
+                    self.ui.shell_dock.show()
+            try:
+                with open(self.cmd_line_shellfile, "r") as myfile:
+                    # if show_splash:
+                    #     self.splash.showMessage('%s: %ssec\n%s' % (
+                    #         _("Canvas initialization started.\n"
+                    #           "Canvas initialization finished in"), '%.2f' % self.used_time,
+                    #         _("Executing Tcl Script ...")),
+                    #                             alignment=Qt.AlignBottom | Qt.AlignmentFlag.AlignLeft,
+                    #                             color=QtGui.QColor("lightgray"))
+                    cmd_line_shellfile_text = myfile.read()
+                    if self.cmd_line_headless != 1:
+                        self.shell.exec_command(cmd_line_shellfile_text)
+                    else:
+                        self.shell.exec_command(cmd_line_shellfile_text, no_echo=True)
+
+            except Exception as ext:
+                print("ERROR: ", ext)
+                sys.exit(2)
+
+        # accept some type file as command line parameter: FlatCAM project, FlatCAM preferences or scripts
+        # the path/file_name must be enclosed in quotes, if it contains spaces
+        if App.args:    # noqa
+            self.args_at_startup.emit(App.args)     # noqa
+
+        if self.defaults.old_defaults_found is True:
+            self.inform.emit('[WARNING_NOTCL] %s' % _("Found old default preferences files. "
+                                                      "Please reboot the application to update."))
+            self.defaults.old_defaults_found = False
+        self.ui.general_pref_form.general_app_set_group.cursor_radio.activated_custom.connect(self.on_cursor_type)
+
+        # ######################################## Tools related signals ############################################
+
+        # portability changed signal
+        self.ui.general_pref_form.general_app_group.portability_cb.stateChanged.connect(self.on_portable_checked)
+
+        # Object list
+        self.object_status_changed.connect(self.collection.on_collection_updated)
+
+        # when there are arguments at application startup this get launched
+        self.args_at_startup[list].connect(self.on_startup_args)
+
+        # ###########################################################################################################
+        # ########################################### GUI SIGNALS ###################################################
+        # ###########################################################################################################
+        self.ui.hud_label.clicked.connect(self.plotcanvas.on_toggle_hud)
+        self.ui.axis_status_label.clicked.connect(self.plotcanvas.on_toggle_axis)
+        self.ui.pref_status_label.clicked.connect(self.on_toggle_preferences)
+
+        # ###########################################################################################################
+        # ####################################### VARIOUS SIGNALS ###################################################
+        # ###########################################################################################################
+        # connect the abort_all_tasks related slots to the related signals
+        self.proc_container.idle_flag.connect(self.app_is_idle)
+
+        # signal emitted when a tab is closed in the Plot Area
+        self.ui.plot_tab_area.tab_closed_signal.connect(self.on_plot_area_tab_closed)
+
+        # signal emitted when a tab is closed in the Plot Area
+        self.ui.notebook.tab_closed_signal.connect(self.on_notebook_closed)
+
+        # signal to close the application
+        self.close_app_signal.connect(self.kill_app)    # noqa
+
+        # signal to process the body of a script
+        self.run_script.connect(self.script_processing)     # noqa
+        # ################################# FINISHED CONNECTING SIGNALS #############################################
+        # ###########################################################################################################
+        # ###########################################################################################################
+        # ###########################################################################################################
+
+        self.log.debug("Finished connecting Signals.")
+
+        # ###########################################################################################################
+        # ##################################### Finished the CONSTRUCTOR ############################################
+        # ###########################################################################################################
+        self.log.debug("END of constructor. Releasing control.")
+        self.log.debug("... Resistance is futile. You will be assimilated ...")
+        self.log.debug("... I disagree. While we live and breath, we can be free!\n")
+
+        # ###########################################################################################################
+        # ########################################## SHOW GUI #######################################################
+        # ###########################################################################################################
+
+        # if the app is not started as headless, show it
+        if self.cmd_line_headless != 1:
+            if self._show_splash:
                 # finish the splash
                 self.splash.finish(self.ui)
 
