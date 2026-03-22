@@ -2231,8 +2231,12 @@ class MainGUI(QtWidgets.QMainWindow):
         :param name: String that store the project path and project name
         :return: None
         """
-        title = 'FlatCAM Evo %s %s - %s - [%s]    %s' % (
-            self.app.version, ('BETA' if self.app.beta else ''), platform.architecture()[0], self.app.engine, name)
+        engine = "3D" if self.app.use_3d_engine else "2D"
+        title = (
+            f"FlatCAM Evo {self.app.version} "
+            f"{'BETA' if self.app.beta else ''} - {platform.architecture()[0]} - "
+            f"[{engine}]    {name}"
+        )
         self.setWindowTitle(title)
 
     def on_toggle_gui(self):

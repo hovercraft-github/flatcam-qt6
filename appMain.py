@@ -7,10 +7,9 @@
 # Modified by Marius Stanciu (2019)                         #
 # ###########################################################
 
-from PyQt6 import QtGui, QtWidgets
-from PyQt6.QtCore import QSettings, pyqtSlot
-from PyQt6.QtCore import Qt, pyqtSignal, QMetaObject
-from PyQt6.QtGui import QAction
+from PyQt6 import QtGui, QtWidgets  # noqa
+from PyQt6.QtCore import QSettings, pyqtSlot    # noqa
+from PyQt6.QtCore import Qt, pyqtSignal, QMetaObject    # noqa
 
 import os.path
 import sys
@@ -35,7 +34,12 @@ import platform
 import re
 import subprocess
 
-from shapely import Point, MultiPolygon, MultiLineString, Polygon
+from shapely import (
+    Point,
+    MultiPolygon,
+    MultiLineString,
+    Polygon
+)
 from shapely.ops import unary_union
 from io import StringIO
 
@@ -52,11 +56,9 @@ import libs.qdarktheme.themes.dark.stylesheet as qdarksheet
 import libs.qdarktheme.themes.light.stylesheet as qlightsheet
 
 from typing import Union
+from ast import literal_eval
 
-# ####################################################################################################################
 # ###################################      Imports part of FlatCAM       #############################################
-# ####################################################################################################################
-
 # App appGUI
 from appGUI.PlotCanvas import PlotCanvas
 from appGUI.PlotCanvas3d import PlotCanvas3d
@@ -72,7 +74,6 @@ from appGUI.GUIElements import (
     FCFileSaveDialog,
     message_dialog,
     AppSystemTray,
-    FCInputDialogSlider,
     GLay,
     FCLabel,
     DialogBoxChoice,
@@ -81,7 +82,6 @@ from appGUI.GUIElements import (
 from appGUI.themes import dark_style_sheet, light_style_sheet
 
 # Various
-from appCommon.Common import color_variant
 from appCommon.Common import ExclusionAreas
 from appCommon.Common import AppLogging
 from appCommon.RegisterFileKeywords import RegisterFK, Extensions, KeyWords
@@ -153,26 +153,28 @@ class App(QtCore.QObject):
     The main application class. The constructor starts the GUI and all other classes used by the program.
     """
 
-    # ###############################################################################################################
-    # ########################################## App ################################################################
-    # ###############################################################################################################
-
-    # ###############################################################################################################
     # #################################### Get Cmd Line Options #####################################################
-    # ###############################################################################################################
     cmd_line_shellfile = ''
     cmd_line_shellvar = ''
     cmd_line_headless = None
 
-    cmd_line_help = "FlatCam.py --shellfile=<cmd_line_shellfile>\n" \
-                    "FlatCam.py --shellvar=<1,'C:\\path',23>\n" \
-                    "FlatCam.py --headless=1"
+    cmd_line_help = (
+        "FlatCam.py --shellfile=<cmd_line_shellfile>\n"
+        "FlatCam.py --shellvar=<1,'C:\\path',23>\n"
+        "FlatCam.py --headless=1"
+    )
     try:
         # Multiprocessing pool will spawn additional processes with 'multiprocessing-fork' flag
-        cmd_line_options, args = getopt.getopt(sys.argv[1:], "h:", ["shellfile=",
-                                                                    "shellvar=",
-                                                                    "headless=",
-                                                                    "multiprocessing-fork="])
+        cmd_line_options, args = getopt.getopt(
+            sys.argv[1:],
+            "h:",
+            [
+                "shellfile=",
+                "shellvar=",
+                "headless=",
+                "multiprocessing-fork="
+            ]
+        )
     except getopt.GetoptError:
         print(cmd_line_help)
         sys.exit(2)
@@ -191,23 +193,18 @@ class App(QtCore.QObject):
             except NameError:
                 pass
 
-    # ###############################################################################################################
     # ################################### Version and VERSION DATE ##################################################
-    # ###############################################################################################################
     version = "Unstable"
     # version = 1.0
     version_date = "2026/5/01"
     beta = True
-    engine = '3D'
 
     # current date now
     date = str(dt.today()).rpartition('.')[0]
     date = ''.join(c for c in date if c not in ':-')
     date = date.replace(' ', '_')
 
-    # ###############################################################################################################
     # ############################################ URLS's ###########################################################
-    # ###############################################################################################################
     # URL for update checks and statistics
     version_url = "http://flatcam.org/version"
 
@@ -217,12 +214,12 @@ class App(QtCore.QObject):
     # Manual URL
     manual_url = "http://flatcam.org/manual/index.html"
     video_url = "https://www.youtube.com/playlist?list=PLVvP2SYRpx-AQgNlfoxw93tXUXon7G94_"
-    gerber_spec_url = "https://www.ucamco.com/files/downloads/file/81/The_Gerber_File_Format_specification." \
-                      "pdf?7ac957791daba2cdf4c2c913f67a43da"
+    gerber_spec_url = ("https://www.ucamco.com/files/downloads/file/81/"
+                       "The_Gerber_File_Format_specification.pdf?7ac957791daba2cdf4c2c913f67a43da")
     excellon_spec_url = "https://www.ucamco.com/files/downloads/file/305/the_xnc_file_format_specification.pdf"
     bug_report_url = "https://bitbucket.org/jpcgt/flatcam/issues?status=new&status=open"
-    donate_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_" \
-                 "donations&business=WLTJJ3Q77D98L&currency_code=USD&source=url"
+    donate_url = ("https://www.paypal.com/cgi-bin/webscr?cmd="
+                  "_donations&business=WLTJJ3Q77D98L&currency_code=USD&source=url")
     # this variable will hold the project status
     # if True it will mean that the project was modified and not saved
     should_we_save = False
@@ -230,9 +227,7 @@ class App(QtCore.QObject):
     # flag is True if saving action has been triggered
     save_in_progress = False
 
-    # ###############################################################################################################
     # #######################################    APP Signals   ######################################################
-    # ###############################################################################################################
 
     # Inform the user
     # Handled by: App.info() --> Print on the status bar
@@ -331,7 +326,7 @@ class App(QtCore.QObject):
         self.gcode_editor = None
 
         # Thread/process control
-        self.abort_flag = False
+        self.abort_flag = False      # when True, the app has to return from any thread
         self.pool = None
 
         # Data/Lists
@@ -434,14 +429,13 @@ class App(QtCore.QObject):
 
         # Preferences/collection
         self.defaults = None
-        self.options = None
+        self.options: dict | AppOptions = {}
         self.app_units = None
         self.default_units = None
         self.decimals = None
         self.resource_location = None
         self._current_theme = None
         self.preferencesUiManager = None
-        self.engine = None
 
         # Object management
         self.collection = None
@@ -461,7 +455,7 @@ class App(QtCore.QObject):
         self.hover_shapes = None
         self.tool_shapes = None
         self.sel_shapes = None
-        self.used_time = None
+        self.used_time = 0.0
         self.plotcanvas = None
 
         # Workers
@@ -528,6 +522,7 @@ class App(QtCore.QObject):
         self._setup_paths_and_config()
         self._setup_defaults_and_preferences(user_defaults=user_defaults)
         self._setup_gui()
+        self._setup_workers_crew()
         self._setup_canvas_and_plotting()
         self._setup_tools_and_editors()
         self._setup_system_integration()
@@ -547,37 +542,14 @@ class App(QtCore.QObject):
         handler.setFormatter(formatter)
         self.log.addHandler(handler)
 
-        # App Editors will be instantiated further below
-        self.exc_editor = None
-        self.grb_editor = None
-        self.geo_editor = None
-        self.gcode_editor = None
-
-        # when True, the app has to return from any thread
-        self.abort_flag = False
-
     def _setup_state_variables(self):
         """Phase 1: Setup all state variables for global usage."""
-        # ###########################################################################################################
         # ############################################ Data #########################################################
-        # ###########################################################################################################
-
-        self.recent = []
-        self.recent_projects = []
 
         self.clipboard = QtWidgets.QApplication.clipboard()
-
-        self.project_filename = None
-        self.toggle_units_ignore = False
-
         self.main_thread = QtWidgets.QApplication.instance().thread()
 
-        # ###########################################################################################################
-        # ###########################################################################################################
         # ######################################## Variables for global usage #######################################
-        # ###########################################################################################################
-        # ###########################################################################################################
-
         # hold the App units
         self.units = 'MM'
 
@@ -689,77 +661,82 @@ class App(QtCore.QObject):
 
     def _setup_paths_and_config(self):
         """Phase 1: Setup paths, config files, and platform-specific settings."""
-        # ############################################################################################################
         # ################# Setup the listening thread for another instance launching with args ######################
-        # ############################################################################################################
         if sys.platform == 'win32':
             # make sure the thread is stored by using a self. otherwise it's garbage collected
             self.listen_th = QtCore.QThread()
             self.listen_th.start(priority=QtCore.QThread.Priority.LowestPriority)
 
-            self.new_launch = ArgsThread()
+            self.new_launch = ArgsThread(self.log)
             self.new_launch.open_signal[list].connect(self.on_startup_args)
             self.new_launch.moveToThread(self.listen_th)
             self.new_launch.start.emit()    # noqa
 
-        # ############################################################################################################
         # ########################################## OS-specific #####################################################
-        # ############################################################################################################
+
         portable = False
+        self.cmd_line_headless = 0
 
         # Folder for user settings.
         if sys.platform == 'win32':
-            # if platform.architecture()[0] == '32bit':
-            #     self.log.debug("Win32!")
-            # else:
-            #     self.log.debug("Win64!")
-
-            # #######################################################################################################
             # ####### CONFIG FILE WITH PARAMETERS REGARDING PORTABILITY #############################################
-            # #######################################################################################################
-            config_file = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + '\\config\\configuration.txt'
+            config_file = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+                'config',
+                'configuration.txt'
+            )
             try:
                 with open(config_file, 'r'):
                     pass
             except FileNotFoundError:
-                config_file = os.path.dirname(os.path.realpath(__file__)) + '\\config\\configuration.txt'
+                config_file = os.path.join(
+                    os.path.dirname(os.path.realpath(__file__)),
+                    'config',
+                    'configuration.txt'
+                )
 
             try:
                 with open(config_file, 'r') as f:
-                    try:
-                        for line in f:
-                            param = str(line).replace('\n', '').rpartition('=')
+                    for line in f:
+                        key, _, value = line.partition('=')
+                        key = key.strip()
+                        value = value.strip()
 
-                            if param[0] == 'portable':
-                                try:
-                                    portable = eval(param[2])
-                                except NameError:
-                                    portable = False
-                            if param[0] == 'headless':
-                                if param[2].lower() == 'true':
-                                    self.cmd_line_headless = 1
-                    except Exception as e:
-                        self.log.error('App.__init__() -->%s' % str(e))
-                        return
+                        if key == 'portable':
+                            try:
+                                portable = bool(literal_eval(value))
+                            except (ValueError, SyntaxError):
+                                portable = False
+                        elif key == 'headless':
+                            self.cmd_line_headless = 1 if value.lower() == 'true' else 0
             except FileNotFoundError as e:
                 self.log.error(str(e))
-                pass
+            except Exception as e:
+                self.log.error(f'App.__init__() --> {e}')
+                return
 
-            if portable is False:
-                self.data_path = os.path.join(
-                    os.getenv('APPDATA', os.path.expanduser('~\\AppData\\Roaming')), 'FlatCAM')
+            if not portable:
+                base_appdata = os.getenv('APPDATA') or os.path.join(
+                    os.path.expanduser('~'),
+                    'AppData',
+                    'Roaming'
+                )
+                self.data_path = os.path.join(base_appdata, 'FlatCAM')
             else:
-                self.data_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + '\\config'
+                self.data_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+                    'config'
+                )
 
             self.os = 'windows'
         else:  # Linux/Unix/MacOS
-            self.data_path = os.path.expanduser('~') + '/.FlatCAM'
+            self.data_path = os.path.join(
+                os.path.expanduser('~'),
+                '.FlatCAM'
+            )
             self.os = 'unix'
 
-        # ############################################################################################################
         # ################################# Setup folders and files ##################################################
-        # ############################################################################################################
-
         if not os.path.exists(self.data_path):
             os.makedirs(self.data_path)
             self.log.debug('Created data folder: ' + self.data_path)
@@ -825,9 +802,7 @@ class App(QtCore.QObject):
 
     def _setup_defaults_and_preferences(self, user_defaults=True):
         """Phase 1: Setup defaults, preferences storage, themes, and object classes."""
-        # ############################################################################################################
         # ################################# DEFAULTS - PREFERENCES STORAGE ###########################################
-        # ############################################################################################################
         self.defaults = AppDefaults(beta=self.beta, version=self.version)
 
         # current_defaults_path = os.path.join(self.data_path, "current_defaults.FlatConfig")
@@ -835,9 +810,7 @@ class App(QtCore.QObject):
         if user_defaults:
             self.defaults.load(filename=current_defaults_path, inform=self.inform)
 
-        # ###########################################################################################################
         # ######################################## UPDATE THE OPTIONS ###############################################
-        # ###########################################################################################################
         self.options = AppOptions(version=self.version)
         # -----------------------------------------------------------------------------------------------------------
         #   Update the self.options from the self.defaults
@@ -846,8 +819,6 @@ class App(QtCore.QObject):
         # Copy app defaults to project options
         for def_key, def_val in self.defaults.items():
             self.options[def_key] = deepcopy(def_val)
-
-        # self.preferencesUiManager.show_preferences_gui()
 
         # Set global_theme based on appearance
         if self.options["global_appearance"] == 'auto':
@@ -883,10 +854,7 @@ class App(QtCore.QObject):
             qdarksheet.STYLE_SHEET = dark_style_sheet.D_STYLE_SHEET
             self.qapp.setStyleSheet(libs.qdarktheme.load_stylesheet())
 
-        # ############################################################################################################
         # ################################### Set LOG verbosity ######################################################
-        # ############################################################################################################
-
         if self.options["global_log_verbose"] == 2:
             if self.log.handlers:
                 self.log.handlers.pop()
@@ -896,19 +864,13 @@ class App(QtCore.QObject):
                 self.log.handlers.pop()
             self.log = AppLogging(app=self, log_level=0)
 
-        # ###########################################################################################################
         # #################################### SETUP OBJECT CLASSES #################################################
-        # ###########################################################################################################
         self.setup_obj_classes()
 
-        # ###########################################################################################################
         # ###################################### CREATE MULTIPROCESSING POOL #######################################
-        # ###########################################################################################################
-        self.pool = Pool(processes=self.options["global_process_number"])
+        self.pool = Pool(processes=self.options.get("global_process_number", 2))
 
-        # ###########################################################################################################
         # ###################################### Clear GUI Settings - once at first start ###########################
-        # ###########################################################################################################
         if self.options["first_run"] is True:
             # on first run clear the previous QSettings, therefore clearing the GUI settings
             q_settings = QSettings("Open Source", "FlatCAM_EVO")
@@ -919,9 +881,7 @@ class App(QtCore.QObject):
 
     def _setup_gui(self):
         """Phase 1: Setup GUI, splash screen, languages, preprocessors, main UI, shell, and preferences."""
-        # ###########################################################################################################
         # ###################################### Setting the Splash Screen ##########################################
-        # ###########################################################################################################
         splash_settings = QSettings("Open Source", "FlatCAM_EVO")
         if splash_settings.contains("splash_screen"):
             show_splash = splash_settings.value("splash_screen", type=int)
@@ -962,22 +922,15 @@ class App(QtCore.QObject):
                                     color=QtGui.QColor("lightgray"))
         else:
             self.splash = None
-            show_splash = 0
 
-        # ###########################################################################################################
         # ########################################## LOAD LANGUAGES  ################################################
-        # ###########################################################################################################
-
         self.languages = fcTranslate.load_languages()
         aval_languages = []
         for name in sorted(self.languages.values()):
             aval_languages.append(name)
         self.options["global_languages"] = aval_languages
 
-        # ###########################################################################################################
         # ####################################### APPLY APP LANGUAGE ################################################
-        # ###########################################################################################################
-
         ret_val = fcTranslate.apply_language('strings')
 
         if ret_val == "no language":
@@ -988,10 +941,7 @@ class App(QtCore.QObject):
             self.options["global_language_current"] = ret_val
             self.log.debug("App.__init__() --> Applied %s language." % str(ret_val).capitalize())
 
-        # ###########################################################################################################
         # #################################### LOAD PREPROCESSORS ###################################################
-        # ###########################################################################################################
-
         # ----------------------------------------- WARNING --------------------------------------------------------
         # Preprocessors need to be loaded before the Preferences Manager builds the Preferences
         # That's because the number of preprocessors can vary and here the combobox is populated
@@ -1034,10 +984,7 @@ class App(QtCore.QObject):
             if 'hpgl' not in lowered_name:
                 self.options["tools_drill_preprocessor_list"].append(name)
 
-        # ###########################################################################################################
         # ######################################### Initialize GUI ##################################################
-        # ###########################################################################################################
-
         # FlatCAM colors used in plotting
         self.FC_light_green = '#BBF268BF'
         self.FC_dark_green = '#006E20BF'
@@ -1049,14 +996,15 @@ class App(QtCore.QObject):
         theme_settings.setValue("theme", self.options["global_theme"])
         theme_settings.setValue("dark_canvas", self.options["global_dark_canvas"])
 
-        if self.options["global_cursor_color_enabled"]:
-            self.cursor_color_3D = self.options["global_cursor_color"]
+        if self.options.get("global_cursor_color_enabled", False):
+            self.cursor_color_3D = self.options.get("global_cursor_color", "black")
         else:
-            if (self._current_theme == 'light' or self._current_theme == 'default') \
-                    and not self.options["global_dark_canvas"]:
-                self.cursor_color_3D = 'black'
-            else:
-                self.cursor_color_3D = 'gray'
+            self.cursor_color_3D = (
+                'black'
+                if self._current_theme in ('light', 'default')
+                   and not self.options["global_dark_canvas"]
+                else 'gray'
+            )
 
         # update the 'options' dict with the setting in QSetting
         self.options['global_theme'] = self.options["global_theme"]
@@ -1066,23 +1014,17 @@ class App(QtCore.QObject):
         # ########################
 
         # decide if to show or hide the Notebook side of the screen at startup
-        if self.options["global_project_at_startup"] is True:
-            self.ui.splitter.setSizes([1, 1])
-        else:
-            self.ui.splitter.setSizes([0, 1])
+        split_sizes = [1, 1] if self.options.get("global_project_at_startup", False) else [0, 1]
+        self.ui.splitter.setSizes(split_sizes)
 
-        # ###########################################################################################################
         # ########################################### Initialize Tcl Shell ##########################################
         # ###########################    always initialize it after the UI is initialized   #########################
-        # ###########################################################################################################
         self.shell = FCShell(app=self, version=self.version)
         self.log.debug("Stardate: %s" % self.date)
         self.log.debug("TCL Shell has been initialized.")
 
-        # ###########################################################################################################
         # ####################################### Auto-complete KEYWORDS ############################################
         # ######################## Setup after the Defaults class was instantiated ##################################
-        # ###########################################################################################################
         self.regFK = RegisterFK(
             ui=self.ui,
             inform_sig=self.inform,
@@ -1093,18 +1035,13 @@ class App(QtCore.QObject):
             extensions=Extensions()
         )
 
-        # ###########################################################################################################
         # ########################################### AUTOSAVE SETUP ################################################
-        # ###########################################################################################################
-
         self.block_autosave = False
         self.autosave_timer = QtCore.QTimer(self)
         self.save_project_auto_update()
         self.autosave_timer.timeout.connect(self.save_project_auto)
 
-        # ###########################################################################################################
         # ##################################### UPDATE PREFERENCES GUI FORMS ########################################
-        # ###########################################################################################################
         self.preferencesUiManager = PreferencesUIManager(
             data_path=self.data_path,
             ui=self.ui,
@@ -1118,12 +1055,7 @@ class App(QtCore.QObject):
         # When the self.options dictionary changes will update the Preferences GUI forms
         self.options.set_change_callback(self.on_defaults_dict_change)
 
-        # set the value used in the Windows Title
-        self.engine = self.options["global_graphic_engine"]
-
-        # ###########################################################################################################
         # ###################################### CREATE UNIQUE SERIAL NUMBER ########################################
-        # ###########################################################################################################
         chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
         if self.options['global_serial'] == 0 or len(str(self.options['global_serial'])) < 10:
             self.options['global_serial'] = ''.join([random.choice(chars) for __ in range(20)])
@@ -1131,10 +1063,7 @@ class App(QtCore.QObject):
 
         self.defaults.propagate_defaults()
 
-        # ###########################################################################################################
         # #################################### SETUP OBJECT COLLECTION ##############################################
-        # ###########################################################################################################
-
         self.collection = ObjectCollection(app=self)
         self.ui.project_tab_layout.addWidget(self.collection.view)
 
@@ -1146,15 +1075,10 @@ class App(QtCore.QObject):
         self.collection.view.setMinimumWidth(290)
         self.log.debug("Finished creating Object Collection.")
 
-        # ###########################################################################################################
         # ######################################## SETUP 3D Area ####################################################
-        # ###########################################################################################################
         self.area_3d_tab = QtWidgets.QWidget()
 
-        # ###########################################################################################################
         # ######################################## SETUP Plot Area ##################################################
-        # ###########################################################################################################
-
         self.use_3d_engine = True
         # determine if the Legacy Graphic Engine is to be used or the OpenGL one
         if self.options["global_graphic_engine"] == '2D':
@@ -1195,10 +1119,7 @@ class App(QtCore.QObject):
         # add he PlotCanvas setup to the UI
         self.on_plotcanvas_add(self.plotcanvas, self.ui.right_layout)
 
-        # #############################################################################################################
         # ################   SHAPES STORAGE   #########################################################################
-        # #############################################################################################################
-
         # Storage for shapes, storage that can be used by FlatCAm tools for utility geometry
         if self.use_3d_engine:
             # VisPy visuals
@@ -1228,78 +1149,34 @@ class App(QtCore.QObject):
         self.log.debug("Finished Canvas initialization in %s seconds." % str(self.used_time))
 
         if self._show_splash:
-            self.splash.showMessage('%s: %ssec' % (_("The application is initializing ...\n"
-                                                     "Canvas initialization started.\n"
-                                                     "Canvas initialization finished in"), '%.2f' % self.used_time),
-                                    alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
-                                    color=QtGui.QColor("lightgray"))
+            canvas_msg_1 = _("The application is initializing")
+            canvas_msg_2 = _("Canvas initialization started")
+            canvas_msg_3 = _("Canvas initialization finished in")
+            self.splash.showMessage(
+                f'{canvas_msg_1}\n'
+                f'{canvas_msg_2}\n'
+                f'{canvas_msg_3}: {self.used_time:.2f}sec',
+                alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
+                color=QtGui.QColor("lightgray")
+            )
+
         self.ui.splitter.setStretchFactor(1, 2)
 
-        # ###########################################################################################################
+        self.proc_container = FCVisibleProcessContainer(self.ui.activity_view, app=self)
+
+        # Sets up FlatCAMObj, FCProcess and FCProcessContainer.
+        self.setup_default_properties_tab()
+
+    def _setup_workers_crew(self):
         # ############################################### Worker SETUP ##############################################
-        # ###########################################################################################################
-        w_number = int(self.options["global_worker_number"]) if self.options["global_worker_number"] else 2
+        w_number = int(self.options.get("global_worker_number", 2))
         self.workers = WorkerStack(workers_number=w_number)
 
         self.worker_task.connect(self.workers.add_task)
         self.log.debug("Finished creating Workers crew.")
 
-        # ###########################################################################################################
-        # ############################################# Activity Monitor ############################################
-        # ###########################################################################################################
-        self.proc_container = FCVisibleProcessContainer(self.ui.activity_view, app=self)
-
-        # ###########################################################################################################
-        # ########################################## Other setups ###################################################
-        # ###########################################################################################################
-
-        # Sets up FlatCAMObj, FCProcess and FCProcessContainer.
-        self.setup_default_properties_tab()
-
     def _setup_canvas_and_plotting(self):
         """Phase 1: Setup tool/editor stubs, bookmarks, tools database, shell, editors, and exclusion areas."""
-        # ###########################################################################################################
-        # ########################################## Tools and Plugins ##############################################
-        # ###########################################################################################################
-
-        self.dblsidedtool = None
-        self.distance_tool = None
-        self.distance_min_tool = None
-        self.panelize_tool = None
-        self.film_tool = None
-        self.paste_tool = None
-        self.calculator_tool = None
-        self.rules_tool = None
-        self.sub_tool = None
-        self.move_tool = None
-
-        self.cutout_tool = None
-        self.ncclear_tool = None
-        self.paint_tool = None
-        self.isolation_tool = None
-        self.follow_tool = None
-        self.drilling_tool = None
-        self.milling_tool = None
-        self.levelling_tool = None
-
-        self.optimal_tool = None
-        self.transform_tool = None
-        self.report_tool = None
-        self.pdf_tool = None
-        self.image_tool = None
-        self.pcb_wizard_tool = None
-        self.qrcode_tool = None
-        self.copper_thieving_tool = None
-        self.fiducial_tool = None
-        self.extract_tool = None
-        self.align_objects_tool = None
-        self.punch_tool = None
-        self.invert_tool = None
-        self.markers_tool = None
-        self.etch_tool = None
-
-        # when this list will get populated will contain a list of references to all the Plugins in this APp
-        self.app_plugins = []
 
         # always install tools only after the shell is initialized because the self.inform.emit() depends on shell
         try:
@@ -1307,50 +1184,30 @@ class App(QtCore.QObject):
         except AttributeError as e:
             self.log.debug("App.__init__() install_tools() --> %s" % str(e))
 
-        # ###########################################################################################################
         # ######################################### BookMarks Manager ###############################################
-        # ###########################################################################################################
-
         # install Bookmark Manager and populate bookmarks in the Help -> Bookmarks
         self.install_bookmarks()
         self.book_dialog_tab = BookmarkManager(app=self, storage=self.options["global_bookmarks"])
 
-        # ###########################################################################################################
         # ########################################### Tools Database ################################################
-        # ###########################################################################################################
-
         self.tools_db_tab = None
 
         # ### System Font Parsing ###
         # self.f_parse = ParseFont(self)
         # self.parse_system_fonts()
 
-        # ###########################################################################################################
         # ############################################## Shell SETUP ################################################
-        # ###########################################################################################################
         # show TCL shell at start-up based on the Menu -? Edit -> Preferences setting.
-        if self.options["global_shell_at_startup"]:
-            self.ui.shell_dock.show()
-        else:
-            self.ui.shell_dock.hide()
+        self.ui.shell_dock.setVisible(bool(self.options.get("global_shell_at_startup", False)))
 
-        # ###########################################################################################################
         # ######################################### Check for updates ###############################################
-        # ###########################################################################################################
-
         # Separate thread (Not worker)
         # Check for updates on startup but only if the user consent and the app is not in Beta version
-        if (self.beta is False or self.beta is None) and self.options["global_version_check"] is True:
-            self.log.info("Checking for updates in background (this is version %s)." % str(self.version))
-
-            # self.thr2 = QtCore.QThread()
+        if not self.beta and self.options.get("global_version_check", False):
+            self.log.info(f"Checking for updates in background (this is version {self.version}).")
             self.worker_task.emit({'fcn': self.version_check, 'params': []})
-            # self.thr2.start(QtCore.QThread.Priority.LowPriority)
 
-        # ###########################################################################################################
         # ################################## ADDING FlatCAM EDITORS section #########################################
-        # ###########################################################################################################
-
         # watch out for the position of the editor instantiation ... if it is done before a save of the default values
         # at the first launch of the App , the editors will not be functional.
         try:
@@ -1377,16 +1234,10 @@ class App(QtCore.QObject):
 
         self.ui.set_ui_title(name=_("New Project - Not saved"))
 
-        # ###########################################################################################################
         # ########################################### EXCLUSION AREAS ###############################################
-        # ###########################################################################################################
         self.exc_areas = ExclusionAreas(app=self)
 
-        # ###########################################################################################################
-        # ###########################################################################################################
         # ###################################### INSTANTIATE CLASSES THAT HOLD THE MENU HANDLERS ####################
-        # ###########################################################################################################
-        # ###########################################################################################################
         self.f_handlers = appIO(app=self)
         self.edit_class = appEditor(app=self)
         self.plot_manager = AppPlotManager(app=self)
@@ -1396,10 +1247,8 @@ class App(QtCore.QObject):
 
     def _setup_tools_and_editors(self):
         """Phase 1: Setup first-run section (must run after _setup_canvas_and_plotting for editors)."""
-        # ###########################################################################################################
         # ##################################### FIRST RUN SECTION ###################################################
         # ################################ It's done only once after install   #####################################
-        # ###########################################################################################################
         if self.options["first_run"] is True:
             # ONLY AT FIRST STARTUP INIT THE GUI LAYOUT TO 'minimal'
             self.log.debug("-> First Run: Setting up the first Layout")
@@ -1417,9 +1266,7 @@ class App(QtCore.QObject):
 
     def _setup_system_integration(self):
         """Phase 1: Setup system tray and recent items."""
-        # ###########################################################################################################
         # ############################################### SYS TRAY ##################################################
-        # ###########################################################################################################
         self.parent_w = QtWidgets.QWidget()
         self.trayIcon = None
         if self.cmd_line_headless == 1:
@@ -1435,19 +1282,12 @@ class App(QtCore.QObject):
                                               icon=QtGui.QIcon(self.resource_location + '/app32.png'),
                                               parent=self.parent_w)
 
-        # ###########################################################################################################
         # ############################################ SETUP RECENT ITEMS ###########################################
-        # ###########################################################################################################
         self.setup_recent_items()
 
     def _setup_signal_connections(self):
         """Phase 1: Setup all signal connections."""
-        # ###########################################################################################################
-        # ###########################################################################################################
         # ############################################# Signal handling #############################################
-        # ###########################################################################################################
-        # ###########################################################################################################
-
         # ########################################## Custom signals  ################################################
         # signal for displaying messages in status bar
         self.inform[str].connect(self.info)
@@ -1476,9 +1316,7 @@ class App(QtCore.QObject):
         # post_edit signal
         self.post_edit_sig.connect(self.on_editing_final_action, type=Qt.ConnectionType.QueuedConnection)
 
-        # ###########################################################################################################
         # ########################################## Standard signals ###############################################
-        # ###########################################################################################################
         # File Signals
         self.connect_filemenu_signals()
 
@@ -1516,10 +1354,7 @@ class App(QtCore.QObject):
         # Plot Area double-clicking
         self.ui.plot_tab_area.tabBarDoubleClicked.connect(self.on_plot_area_tab_double_clicked)
 
-        # ###########################################################################################################
         # #################################### GUI PREFERENCES SIGNALS ##############################################
-        # ###########################################################################################################
-
         # ##################################### Workspace Setting Signals ###########################################
         self.ui.general_pref_form.general_app_set_group.wk_cb.currentIndexChanged.connect(
             self.on_workspace_modified)
@@ -1529,9 +1364,7 @@ class App(QtCore.QObject):
 
         self.ui.general_pref_form.general_app_set_group.workspace_cb.stateChanged.connect(self.on_workspace)
 
-        # ###########################################################################################################
         # ######################################## GUI SETTINGS SIGNALS #############################################
-        # ###########################################################################################################
         self.ui.general_pref_form.general_app_set_group.cursor_radio.activated_custom.connect(self.on_cursor_type)
 
         # ######################################## Tools related signals ############################################
@@ -1545,16 +1378,12 @@ class App(QtCore.QObject):
         # when there are arguments at application startup this get launched
         self.args_at_startup[list].connect(self.on_startup_args)
 
-        # ###########################################################################################################
         # ########################################### GUI SIGNALS ###################################################
-        # ###########################################################################################################
         self.ui.hud_label.clicked.connect(self.plotcanvas.on_toggle_hud)
         self.ui.axis_status_label.clicked.connect(self.plotcanvas.on_toggle_axis)
         self.ui.pref_status_label.clicked.connect(self.on_toggle_preferences)
 
-        # ###########################################################################################################
         # ####################################### VARIOUS SIGNALS ###################################################
-        # ###########################################################################################################
         # connect the abort_all_tasks related slots to the related signals
         self.proc_container.idle_flag.connect(self.app_is_idle)
 
@@ -1570,25 +1399,17 @@ class App(QtCore.QObject):
         # signal to process the body of a script
         self.run_script.connect(self.script_processing)     # noqa
         # ################################# FINISHED CONNECTING SIGNALS #############################################
-        # ###########################################################################################################
-        # ###########################################################################################################
-        # ###########################################################################################################
 
         self.log.debug("Finished connecting Signals.")
 
     def _setup_startup(self):
         """Phase 1: Show GUI and process startup arguments."""
-        # ###########################################################################################################
         # ##################################### Finished the CONSTRUCTOR ############################################
-        # ###########################################################################################################
         self.log.debug("END of constructor. Releasing control.")
         self.log.debug("... Resistance is futile. You will be assimilated ...")
         self.log.debug("... I disagree. While we live and breath, we can be free!\n")
 
-        # ###########################################################################################################
         # ########################################## SHOW GUI #######################################################
-        # ###########################################################################################################
-
         # if the app is not started as headless, show it
         if self.cmd_line_headless != 1:
             if self.splash:
@@ -1614,10 +1435,7 @@ class App(QtCore.QObject):
                 self.log.error("App.__init__() Running headless and trying to show the systray got: %s" % str(t_err))
             self.log.warning("*******************  RUNNING HEADLESS  *******************")
 
-        # ###########################################################################################################
         # ######################################## START-UP ARGUMENTS ###############################################
-        # ###########################################################################################################
-
         # test if the program was started with a script as parameter
         if self.cmd_line_shellvar:
             try:
@@ -1688,16 +1506,12 @@ class App(QtCore.QObject):
         # when there are arguments at application startup this get launched
         self.args_at_startup[list].connect(self.on_startup_args)
 
-        # ###########################################################################################################
         # ########################################### GUI SIGNALS ###################################################
-        # ###########################################################################################################
         self.ui.hud_label.clicked.connect(self.plotcanvas.on_toggle_hud)
         self.ui.axis_status_label.clicked.connect(self.plotcanvas.on_toggle_axis)
         self.ui.pref_status_label.clicked.connect(self.on_toggle_preferences)
 
-        # ###########################################################################################################
         # ####################################### VARIOUS SIGNALS ###################################################
-        # ###########################################################################################################
         # connect the abort_all_tasks related slots to the related signals
         self.proc_container.idle_flag.connect(self.app_is_idle)
 
@@ -1713,23 +1527,15 @@ class App(QtCore.QObject):
         # signal to process the body of a script
         self.run_script.connect(self.script_processing)     # noqa
         # ################################# FINISHED CONNECTING SIGNALS #############################################
-        # ###########################################################################################################
-        # ###########################################################################################################
-        # ###########################################################################################################
 
         self.log.debug("Finished connecting Signals.")
 
-        # ###########################################################################################################
         # ##################################### Finished the CONSTRUCTOR ############################################
-        # ###########################################################################################################
         self.log.debug("END of constructor. Releasing control.")
         self.log.debug("... Resistance is futile. You will be assimilated ...")
         self.log.debug("... I disagree. While we live and breath, we can be free!\n")
 
-        # ###########################################################################################################
         # ########################################## SHOW GUI #######################################################
-        # ###########################################################################################################
-
         # if the app is not started as headless, show it
         if self.cmd_line_headless != 1:
             if self._show_splash:
@@ -1755,10 +1561,7 @@ class App(QtCore.QObject):
                 self.log.error("App.__init__() Running headless and trying to show the systray got: %s" % str(t_err))
             self.log.warning("*******************  RUNNING HEADLESS  *******************")
 
-        # ###########################################################################################################
         # ######################################## START-UP ARGUMENTS ###############################################
-        # ###########################################################################################################
-
         # test if the program was started with a script as parameter
         if self.cmd_line_shellvar:
             try:
@@ -1818,11 +1621,6 @@ class App(QtCore.QObject):
             self.defaults.old_defaults_found = False
 
     # ######################################### INIT FINISHED  #######################################################
-    # #################################################################################################################
-    # #################################################################################################################
-    # #################################################################################################################
-    # #################################################################################################################
-    # #################################################################################################################
 
     @staticmethod
     def copy_and_overwrite(from_path, to_path):
@@ -2365,13 +2163,6 @@ class App(QtCore.QObject):
         self.ui.menueditpreferences.triggered.connect(self.on_preferences)
 
     def connect_optionsmenu_signals(self):
-        # self.ui.menuoptions_transfer_a2o.triggered.connect(self.on_options_app2object)
-        # self.ui.menuoptions_transfer_a2p.triggered.connect(self.on_defaults2options)
-        # self.ui.menuoptions_transfer_o2a.triggered.connect(self.on_options_object2app)
-        # self.ui.menuoptions_transfer_p2a.triggered.connect(self.on_options_project2app)
-        # self.ui.menuoptions_transfer_o2p.triggered.connect(self.on_options_object2project)
-        # self.ui.menuoptions_transfer_p2o.triggered.connect(self.on_options_project2object)
-
         self.ui.menuoptions_transform_rotate.triggered.connect(self.on_rotate)
 
         self.ui.menuoptions_transform_skewx.triggered.connect(self.on_skewx)
@@ -2380,7 +2171,9 @@ class App(QtCore.QObject):
         self.ui.menuoptions_transform_flipx.triggered.connect(self.on_flipx)
         self.ui.menuoptions_transform_flipy.triggered.connect(self.on_flipy)
         self.ui.menuoptions_view_source.triggered.connect(self.on_view_source)
-        self.ui.menuoptions_tools_db.triggered.connect(lambda: self.on_tools_database(source='app'))
+        self.ui.menuoptions_tools_db.triggered.connect(
+            lambda: self.on_tools_database(source='app')
+        )
         self.ui.menuoptions_experimental_3D_area.triggered.connect(self.on_3d_area)
 
     def connect_menuview_signals(self):
@@ -2924,9 +2717,7 @@ class App(QtCore.QObject):
             bt_yes = msgbox.addButton(_('Yes'), QtWidgets.QMessageBox.ButtonRole.YesRole)
             bt_no = msgbox.addButton(_('No'), QtWidgets.QMessageBox.ButtonRole.NoRole)
             if edited_obj.kind in ["geometry", "gerber", "excellon"] or force_cancel is not None:
-                bt_cancel = msgbox.addButton(_('Cancel'), QtWidgets.QMessageBox.ButtonRole.RejectRole)
-            else:
-                bt_cancel = None
+                msgbox.addButton(_('Cancel'), QtWidgets.QMessageBox.ButtonRole.RejectRole)
 
             msgbox.setDefaultButton(bt_yes)
             msgbox.exec()
@@ -3376,34 +3167,26 @@ class App(QtCore.QObject):
                 self.setWindowIcon(self.app_icon)
                 self.setWindowTitle(_("About"))
                 self.resize(600, 200)
-                # self.setStyleSheet("background-image: url(share/flatcam_icon256.png); background-attachment: fixed")
-                # self.setStyleSheet(
-                #     "border-image: url(share/flatcam_icon256.png) 0 0 0 0 compact compact; "  # noqa
-                #     "background-attachment: fixed"
-                # )
-
-                # bgimage = QtGui.QImage(self.resource_location + '/flatcam_icon256.png')
-                # s_bgimage = bgimage.scaled(QtCore.QSize(self.frameGeometry().width(), self.frameGeometry().height()))
-                # palette = QtGui.QPalette()
-                # palette.setBrush(10, QtGui.QBrush(bgimage))  # 10 = Windowrole
-                # self.setPalette(palette)
 
                 logo = FCLabel()
                 logo.setPixmap(QtGui.QPixmap(self.app.resource_location + '/app256.png'))
 
+                title_text = _("PCB Manufacturing files Viewer/Editor with Plugins")
+                development_label = _("Development")
+                download_label = _("DOWNLOAD")
+                issue_label = _("Issue tracker")
+
+                devel_link = "https://bitbucket.org/jpcgt/flatcam/src/Beta/"
+                download_link = "https://bitbucket.org/jpcgt/flatcam/downloads/"
+                issues_link = "https://bitbucket.org/jpcgt/flatcam/issues?status=new&status=open/"
+
                 title = FCLabel(
-                    "<font size=8><B>FlatCAM Evo</B></font><BR>"
-                    "{title}<BR>"
-                    "<BR>"
-                    "<BR>"
-                    "<a href = \"https://bitbucket.org/jpcgt/flatcam/src/Beta/\"><B>{devel}</B></a><BR>"
-                    "<a href = \"https://bitbucket.org/jpcgt/flatcam/downloads/\"><b>{down}</B></a><BR>"
-                    "<a href = \"https://bitbucket.org/jpcgt/flatcam/issues?status=new&status=open/\">"
-                    "<B>{issue}</B></a><BR>".format(
-                        title=_("PCB Manufacturing files Viewer/Editor with Plugins"),
-                        devel=_("Development"),
-                        down=_("DOWNLOAD"),
-                        issue=_("Issue tracker"))
+                    f"<font size=8><B>FlatCAM Evo</B></font><BR>"
+                    f"{title_text}<BR>"
+                    f"<BR><BR>"
+                    f'<a href="{devel_link}"><B>{development_label}</B></a><BR>'
+                    f'<a href="{download_link}"><B>{download_label}</B></a><BR>'
+                    f'<a href="{issues_link}"><B>{issue_label}</B></a><BR>'
                 )
                 title.setOpenExternalLinks(True)
 
@@ -6538,7 +6321,7 @@ class App(QtCore.QObject):
             if self.doubleclick is True:
                 self.doubleclick = False
 
-                # The 1st mouse_release of the double-click already ran select_objects()
+                # The 1st mouse_release of the double click already ran select_objects()
                 # which may have toggled the object OFF. Re-select so double-click
                 # always leaves the object selected.
                 if not self.collection.get_selected():
@@ -7475,21 +7258,47 @@ class App(QtCore.QObject):
         try:
             image_opener = self.image_tool.import_image
         except AttributeError:
-            def image_opener_fallback(filename):
-                self.inform.emit('[WARNING] %s' % _("Cannot open image file. Image tool is not available."))
+            def image_opener_fallback(filename):    # noqa
+                self.inform.emit(
+                    '[WARNING] %s' % _("Cannot open image file. Image tool is not available.")
+                )
             image_opener = image_opener_fallback
 
         openers = {
-            'gerber': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.open_gerber, 'params': [fname]}),
-            'excellon': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.open_excellon, 'params': [fname]}),
-            'geometry': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.import_dxf, 'params': [fname]}),
-            'cncjob': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.open_gcode, 'params': [fname]}),
-            "script": lambda fname: self.worker_task.emit({'fcn': self.f_handlers.open_script, 'params': [fname]}),
+            'gerber': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.open_gerber,
+                'params': [fname]
+            }),
+            'excellon': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.open_excellon,
+                'params': [fname]
+            }),
+            'geometry': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.import_dxf,
+                'params': [fname]
+            }),
+            'cncjob': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.open_gcode,
+                'params': [fname]
+            }),
+            "script": lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.open_script,
+                'params': [fname]
+            }),
             "document": None,
             'project': self.f_handlers.open_project,
-            'svg': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.import_svg, 'params': [fname]}),
-            'dxf': lambda fname: self.worker_task.emit({'fcn': self.f_handlers.import_dxf, 'params': [fname]}),
-            'image': lambda fname: self.worker_task.emit({'fcn': image_opener, 'params': [fname]}),
+            'svg': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.import_svg,
+                'params': [fname]
+            }),
+            'dxf': lambda fname: self.worker_task.emit({
+                'fcn': self.f_handlers.import_dxf,
+                'params': [fname]
+            }),
+            'image': lambda fname: self.worker_task.emit({
+                'fcn': image_opener,
+                'params': [fname]
+            }),
             'pdf': self.f_handlers.import_pdf
         }
 
@@ -8161,11 +7970,12 @@ class ArgsThread(QtCore.QObject):
     else:
         address = ('/tmp/testipc', 'AF_UNIX')
 
-    def __init__(self):
+    def __init__(self, log):
         super().__init__()
         self.listener = None
         self.conn = None
         self.thread_exit = False
+        self.log = log
 
         self.start.connect(self.run)    # noqa
         self.stop.connect(self.close_listener, type=Qt.ConnectionType.QueuedConnection)  # noqa

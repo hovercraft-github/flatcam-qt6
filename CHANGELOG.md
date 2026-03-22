@@ -8,6 +8,12 @@ CHANGELOG for FlatCAM Evo beta
 
 =================================================
 
+22.03.2026
+
+appMain.py:
+
+- refactored the __init__ method into smaller methods and a number of small fixes
+
 21.03.2026
 
 appMain.py:
