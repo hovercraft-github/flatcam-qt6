@@ -317,6 +317,212 @@ class App(QtCore.QObject):
         # Store qapp reference FIRST before any setup methods
         self.qapp = qapp
 
+        # =========================================================================
+        # DECLARE ALL INSTANCE ATTRIBUTES HERE
+        # =========================================================================
+
+        # Logging
+        self.log = None
+
+        # Editors (instantiated later)
+        self.exc_editor = None
+        self.grb_editor = None
+        self.geo_editor = None
+        self.gcode_editor = None
+
+        # Thread/process control
+        self.abort_flag = False
+        self.pool = None
+
+        # Data/Lists
+        self.recent = []
+        self.recent_projects = []
+        self.all_objects_list = []
+        self.sel_objects_list = []
+        self.objects_under_the_click_list = []
+        self.app_plugins = []
+
+        # UI State
+        self.clipboard = None
+        self.project_filename = None
+        self.toggle_units_ignore = False
+        self.main_thread = None
+
+        # Units and coordinates
+        self.units = 'MM'
+        self.rel_point1 = (0, 0)
+        self.rel_point2 = (0, 0)
+        self.pos_jump = (0, 0)
+        self._mouse_click_pos = [0, 0]
+        self._mouse_pos = [0, 0]
+        self.mouse_down = None
+        self.dx = 0
+        self.dy = 0
+
+        # Mouse/click state
+        self.doubleclick = False
+        self.event_is_dragging = False
+        self.command_active = None
+        self.selection_type = None
+        self.key_modifiers = None
+
+        # Editor/tabs
+        self.toggle_codeeditor = False
+        self.click_noproject = False
+        self.cursor = None
+        self.inhibit_context_menu = False
+        self.gcode_edited = ""
+        self.old_state_of_tools_toolbar = False
+        self.text_editor_tab = None
+        self.old_tab_text_color = None
+        self.reference_code_editor = None
+        self.script_code = ''
+        self.source_editor_tab = None
+        self.tools_db_changed_flag = False
+        self.plugin_tab_locked = False
+
+        # Filters
+        self.last_op_gerber_filter = None
+        self.last_op_excellon_filter = None
+        self.last_op_gcode_filter = None
+
+        # Flags
+        self.poly_not_cleared = False
+        self.isHovering = False
+        self.notHovering = True
+        self.block_autosave = False
+
+        # Window geometry
+        self.x_pos = None
+        self.y_pos = None
+        self.width = None
+        self.height = None
+
+        # Misc
+        self.pagesize = {}
+        self.save_timer = None
+        self.call_source = 'app'
+
+        # Paths/config (platform-specific)
+        self.listen_th = None
+        self.new_launch = None
+        self.data_path = None
+        self.os = None
+        self.app_home = None
+        self.preprocessorpaths = None
+
+        # Splash screen
+        self.splash = None
+        self._show_splash = False
+
+        # Language/preprocessors
+        self.languages = None
+        self.preprocessors = None
+
+        # Colors
+        self.FC_light_green = None
+        self.FC_dark_green = None
+        self.FC_light_blue = None
+        self.FC_dark_blue = None
+        self.cursor_color_3D = None
+
+        # UI/Shell
+        self.ui = None
+        self.shell = None
+        self.regFK = None
+        self.autosave_timer = None
+
+        # Preferences/collection
+        self.defaults = None
+        self.options = None
+        self.app_units = None
+        self.default_units = None
+        self.decimals = None
+        self.resource_location = None
+        self._current_theme = None
+        self.preferencesUiManager = None
+        self.engine = None
+
+        # Object management
+        self.collection = None
+        self.app_obj = None
+        self.area_3d_tab = None
+
+        # Canvas/plotting
+        self.use_3d_engine = True
+        self.mp = None
+        self.mm = None
+        self.mr = None
+        self.mdc = None
+        self.mp_zc = None
+        self.kp = None
+        self.axes = None
+        self.app_cursor = None
+        self.hover_shapes = None
+        self.tool_shapes = None
+        self.sel_shapes = None
+        self.used_time = None
+        self.plotcanvas = None
+
+        # Workers
+        self.workers = None
+        self.proc_container = None
+
+        # Tools (all initialized to None)
+        self.dblsidedtool = None
+        self.distance_tool = None
+        self.distance_min_tool = None
+        self.panelize_tool = None
+        self.film_tool = None
+        self.paste_tool = None
+        self.calculator_tool = None
+        self.rules_tool = None
+        self.sub_tool = None
+        self.move_tool = None
+        self.cutout_tool = None
+        self.ncclear_tool = None
+        self.paint_tool = None
+        self.isolation_tool = None
+        self.follow_tool = None
+        self.drilling_tool = None
+        self.milling_tool = None
+        self.levelling_tool = None
+        self.optimal_tool = None
+        self.transform_tool = None
+        self.report_tool = None
+        self.pdf_tool = None
+        self.image_tool = None
+        self.pcb_wizard_tool = None
+        self.qrcode_tool = None
+        self.copper_thieving_tool = None
+        self.fiducial_tool = None
+        self.extract_tool = None
+        self.align_objects_tool = None
+        self.punch_tool = None
+        self.invert_tool = None
+        self.markers_tool = None
+        self.etch_tool = None
+
+        # Bookmarks/tools DB
+        self.book_dialog_tab = None
+        self.tools_db_tab = None
+
+        # Handlers
+        self.f_handlers = None
+        self.edit_class = None
+        self.plot_manager = None
+
+        # Exclusion areas
+        self.exc_areas = None
+
+        # System
+        self.trayIcon = None
+        self.parent_w = None
+
+        # =========================================================================
+        # CALL SETUP METHODS
+        # =========================================================================
+
         self._setup_logging()
         self._setup_state_variables()
         self._setup_paths_and_config()
@@ -340,8 +546,6 @@ class App(QtCore.QObject):
         handler = logging.StreamHandler()
         handler.setFormatter(formatter)
         self.log.addHandler(handler)
-
-        self.log.info("Starting the application...")
 
         # App Editors will be instantiated further below
         self.exc_editor = None
