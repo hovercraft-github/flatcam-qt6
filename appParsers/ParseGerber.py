@@ -1,4 +1,5 @@
 
+from typing import Literal, Sequence, cast
 from PyQt6 import QtWidgets
 from camlib import Geometry, arc, arc_angle, ApertureMacro, grace, flatten_shapely_geometry, translate_geometry
 
@@ -14,8 +15,8 @@ from shapely.ops import unary_union, linemerge
 import shapely
 import shapely.affinity as affinity
 from shapely import box as shply_box
-from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, simplify
-from shapely.geometry.base import BaseMultipartGeometry
+from shapely import LinearRing, MultiLineString, LineString, Polygon, MultiPolygon, Point, prepare, is_prepared, simplify
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 
 from lxml import etree as ET
 import ezdxf
@@ -96,15 +97,19 @@ class Gerber(Geometry):
     #     "use_buffer_for_union": True
     # }
 
-    def __init__(self, app, steps_per_circle=None):
+    def __init__(self, app, steps_per_circle: int | None=None):
         """
         Use ``gerber.parse_files()`` or ``gerber.parse_lines()`` to populate the object from Gerber source.
 
         :return: Gerber object
         :rtype: Gerber
         """
+        # Import app type (for type hinting) here to avoid circular import.
+        from appMain import App
+
+        app = cast(App, app)
+        self.app: App = app
         self.multigeo = None
-        self.app = app
 
         # How to approximate a circle with lines.
         if steps_per_circle is None:
@@ -123,7 +128,7 @@ class Gerber(Geometry):
         self.frac_digits = 4
         """Number of fraction digits in Gerber numbers. Used during parsing."""
 
-        self.gerber_zeros = self.app.options['gerber_def_zeros']
+        self.gerber_zeros: Literal["L", "T"] = self.app.options['gerber_def_zeros']
         """Zeros in Gerber numbers. If 'L' then remove leading zeros, if 'T' remove trailing zeros. Used during parsing.
         """
 
@@ -147,25 +152,25 @@ class Gerber(Geometry):
         '''
 
         # store the file units here:
-        self.units = self.app.options['gerber_def_units']
+        self.units: Literal["IN", "MM"] = self.app.options['gerber_def_units']
 
         # aperture storage
-        self.tools = {}
+        self.tools: dict[int | None, dict] = {}
 
         # Aperture Macros
-        self.aperture_macros = {}
+        self.aperture_macros: dict[str, ApertureMacro] = {}
 
         # will store the Gerber geometry's as solids
-        self.solid_geometry = Polygon()
+        self.solid_geometry: list[BaseGeometry] | BaseGeometry = Polygon()
 
         # will store the Gerber geometry's as paths
         self.follow_geometry = []
 
         # made True when the LPC command is encountered in Gerber parsing
         # it allows adding data into the clear_geometry key of the self.tools[aperture] dict
-        self.is_lpc = False
+        self.is_lpc: bool = False
 
-        self.source_file = ''
+        self.source_file: str = ''
 
         # #############################################################################################################
         # ################################# Parser patterns ###########################################################
@@ -261,10 +266,10 @@ class Gerber(Geometry):
 
         # flag to store if a conversion was done. It is needed because multiple units declarations can be found
         # in a Gerber file (normal or obsolete ones)
-        self.conversion_done = False
+        self.conversion_done: bool = False
 
         # Flag to detect if an aperture is used without definition
-        self.defective_aperture_detected = False
+        self.defective_aperture_detected: bool = False
 
         self.use_buffer_for_union = self.app.options["gerber_use_buffer_for_union"]
 
@@ -306,10 +311,8 @@ class Gerber(Geometry):
         # referenced it without the zero, so this is a hack to handle that.
         apid = int(apertureId)
 
-        try:  # Could be empty for aperture macros
-            paramList = apParameters.split('X')
-        except Exception:
-            paramList = None
+        # Could be empty for aperture macros
+        paramList = (apParameters or "").split('X')
 
         if apertureType == "C":  # Circle, example: %ADD11C,0.1*%
             self.tools[apid] = {
@@ -427,7 +430,7 @@ class Gerber(Geometry):
                 return
 
     # @profile
-    def parse_lines(self, glines: List[str]) -> Optional[str]:
+    def parse_lines(self, glines: Sequence[str]) -> Optional[str]:
         """
         Main Gerber parser. Reads Gerber and populates ``self.paths``, ``self.tools``,
         ``self.flashes``, ``self.regions`` and ``self.units``.
@@ -485,16 +488,16 @@ class Gerber(Geometry):
         # Only then they are combined via unary_union and added or
         # subtracted from solid_geometry. This is ~100 times faster than
         # applying a union for every new polygon.
-        poly_buffer = []
+        poly_buffer: list[Polygon] = []
 
         # store here the follow geometry
         follow_buffer = []
 
-        last_path_aperture = None
-        current_aperture = None
+        last_path_aperture: int | None = None
+        current_aperture: int | None | Literal["failure"] = None
 
         # 1,2 or 3 from "G01", "G02" or "G03"
-        current_interpolation_mode = None
+        current_interpolation_mode : int | None = None
 
         # 1 or 2 from "D01" or "D02"
         # Note this is to support deprecated Gerber not putting
@@ -521,11 +524,10 @@ class Gerber(Geometry):
         current_polarity = 'D'
 
         # If a region is being defined
-        making_region = False
+        making_region: bool = False
 
         # ### Parsing starts here ## ##
-        line_num = 0
-        gline = ""
+        line_num: int = 0
 
         s_tol = float(self.app.options["gerber_simp_tolerance"])
 
@@ -626,6 +628,7 @@ class Gerber(Geometry):
                         buff_length = 1
 
                     if buff_length > 0:
+                        assert isinstance(self.solid_geometry, BaseGeometry)
                         if current_polarity == 'D':
                             self.solid_geometry = self.solid_geometry.union(unary_union(poly_buffer))
 
@@ -647,7 +650,7 @@ class Gerber(Geometry):
                 if match:
                     absolute = {'A': 'Absolute', 'I': 'Relative'}[match.group(2)]
                     if match.group(1) is not None:
-                        self.gerber_zeros = match.group(1)
+                        self.gerber_zeros = cast(Literal["L", "T"], match.group(1))
                     self.int_digits = int(match.group(3))
                     self.frac_digits = int(match.group(4))
                     self.app.log.debug("Gerber format found. (%s) " % str(gline))
@@ -664,7 +667,7 @@ class Gerber(Geometry):
                 # ################################################################
                 match = self.mode_re.search(gline)
                 if match:
-                    self.units = match.group(1)
+                    self.units = cast(Literal["IN", "MM"], match.group(1))
                     self.app.log.debug("Gerber units found = %s" % self.units)
                     # Changed for issue #80
                     # self.convert_units(match.group(1))
@@ -680,7 +683,7 @@ class Gerber(Geometry):
                 if match:
                     absolute = {'A': 'Absolute', 'I': 'Relative'}[match.group(2)]
                     if match.group(1) is not None:
-                        self.gerber_zeros = match.group(1)
+                        self.gerber_zeros = cast(Literal["L", "T"], match.group(1))
                     self.int_digits = int(match.group(3))
                     self.frac_digits = int(match.group(4))
                     self.app.log.debug("Gerber format found. (%s) " % str(gline))
@@ -689,7 +692,7 @@ class Gerber(Geometry):
                         "D-no zero suppression)" % self.gerber_zeros)
                     self.app.log.debug("Gerber format found. Coordinates type = %s (Absolute or Relative)" % absolute)
 
-                    self.units = match.group(5)
+                    self.units = cast(Literal["IN", "MM"], match.group(5))
                     s_tol = float(self.app.options["gerber_simp_tolerance"]) / 25.4 if self.units == 'IN' else s_tol
 
                     self.app.log.debug("Gerber units found = %s" % self.units)
@@ -710,7 +713,7 @@ class Gerber(Geometry):
                             quadrant_mode = 'MULTI'
                         absolute = {'A': 'Absolute', 'I': 'Relative'}[match.group(3)]
                         if match.group(2) is not None:
-                            self.gerber_zeros = match.group(2)
+                            self.gerber_zeros = cast(Literal["L", "T"], match.group(2))
 
                         self.int_digits = int(match.group(4))
                         self.frac_digits = int(match.group(5))
@@ -721,7 +724,7 @@ class Gerber(Geometry):
                         self.app.log.debug(
                             "Gerber format found. Coordinates type = %s (Absolute or Relative)" % absolute)
 
-                        self.units = match.group(1)
+                        self.units = cast(Literal["IN", "MM"], match.group(1))
                         s_tol = float(
                             self.app.options["gerber_simp_tolerance"]) / 25.4 if self.units == 'IN' else s_tol
 
@@ -736,7 +739,10 @@ class Gerber(Geometry):
                 # ################################################################
                 match = self.units_re.search(gline)
                 if match:
-                    obs_gerber_units = {'0': 'IN', '1': 'MM'}[match.group(1)]
+                    if match.group(1) == "0":
+                        obs_gerber_units = "IN"
+                    elif match.group(1) == "1":
+                        obs_gerber_units = "MM"
                     self.units = obs_gerber_units
                     s_tol = float(self.app.options["gerber_simp_tolerance"]) / 25.4 if self.units == 'IN' else s_tol
 
@@ -1418,6 +1424,7 @@ class Gerber(Geometry):
                 sol_geo_length = 1
 
             try:
+                assert isinstance(self.solid_geometry, BaseGeometry)
                 if buff_length == 0 and sol_geo_length in [0, 1] and self.solid_geometry.area == 0:
                     self.app.log.error("Object is not Gerber file or empty. Aborting Object creation.")
                     return 'fail'
@@ -1479,15 +1486,16 @@ class Gerber(Geometry):
                 # features
                 if extra_buffering:
                     candidate_geo = []
+                    geo_to_buff: Sequence[BaseGeometry] | BaseGeometry
                     if isinstance(self.solid_geometry, MultiPolygon):
                         geo_to_buff = self.solid_geometry.geoms
                     else:
                         geo_to_buff = self.solid_geometry
-                    try:
+                    if isinstance(geo_to_buff, BaseGeometry):
+                        candidate_geo.append(geo_to_buff.buffer(-0.0000001))
+                    else:
                         for p in geo_to_buff:
                             candidate_geo.append(p.buffer(-0.0000001))
-                    except TypeError:
-                        candidate_geo.append(geo_to_buff.buffer(-0.0000001))
                     self.solid_geometry = candidate_geo
 
             else:
@@ -1959,6 +1967,7 @@ class Gerber(Geometry):
         :rtype: Shapely.Polygon
         """
 
+        assert isinstance(self.solid_geometry, BaseGeometry)
         bbox = self.solid_geometry.envelope.buffer(margin)
         if not rounded:
             bbox = bbox.envelope
@@ -2062,6 +2071,7 @@ class Gerber(Geometry):
         self.app.log.debug("appParsers.ParseGerber.Gerber.import_svg()")
 
         # Parse into list of shapely objects
+        assert hasattr(ET, "parse")
         svg_tree = ET.parse(filename)
         svg_root = svg_tree.getroot()
 
@@ -2101,17 +2111,12 @@ class Gerber(Geometry):
             geos = [affinity.translate(affinity.scale(g, 1.0, -1.0, origin=(0, 0)), yoff=h) for g in geos]
             self.app.log.debug("appParsers.ParseGerber.Gerber.import_svg(). SVG geometry was flipped.")
 
-        # Add to object
-        if self.solid_geometry is None:
-            self.solid_geometry = []
-
-        # if type(self.solid_geometry) == list:
-        #     if type(geos) == list:
-        #         self.solid_geometry += geos
-        #     else:
-        #         self.solid_geometry.append(geos)
-        # else:  # It's shapely geometry
-        #     self.solid_geometry = [self.solid_geometry, geos]
+        # Work with a local list first because it makes typing a lot easier
+        solid_geometry: list[BaseGeometry] = []
+        if isinstance(self.solid_geometry, BaseGeometry):
+            solid_geometry.append(self.solid_geometry)
+        elif isinstance(self.solid_geometry, list):
+            solid_geometry += self.solid_geometry
 
         if type(geos) == list:
             # HACK for importing QRCODE exported by FlatCAM
@@ -2126,19 +2131,12 @@ class Gerber(Geometry):
                     geo_qrcode.append(Polygon(i_el).buffer(0, resolution=res))
                 geos = [poly for poly in geo_qrcode]
 
-            if type(self.solid_geometry) == list:
-                self.solid_geometry += geos
-            else:
-                geos.append(self.solid_geometry)
-                self.solid_geometry = geos
-        else:
-            if type(self.solid_geometry) == list:
-                self.solid_geometry.append(geos)
-            else:
-                self.solid_geometry = [self.solid_geometry, geos]
+            solid_geometry += geos
+        elif isinstance(geos, BaseGeometry):
+            solid_geometry.append(geos)
 
         # flatten the self.solid_geometry list for import_svg() to import SVG as Gerber
-        self.solid_geometry = flatten_shapely_geometry(self.solid_geometry)
+        solid_geometry = flatten_shapely_geometry(solid_geometry)
         if 0 not in self.tools:
             self.tools[0] = {
                 'type':         'REG',
@@ -2146,10 +2144,11 @@ class Gerber(Geometry):
                 'geometry':     []
             }
 
-        for pol in self.solid_geometry:
+        for pol in solid_geometry:
             prepare(pol)
             new_el = {'solid': pol, 'follow': LineString(pol.exterior.coords)}
             self.tools[0]['geometry'].append(new_el)
+        self.solid_geometry = solid_geometry
 
     def import_dxf_as_gerber(self, filename, units='MM', text_mode='stroke'):
         """
@@ -2194,24 +2193,25 @@ class Gerber(Geometry):
         except TypeError:
             geos.append(merged_lines)
 
-        # Add to object
-        if self.solid_geometry is None:
-            self.solid_geometry = []
+        # Work with a local list first because it makes typing a lot easier
+        solid_geometry: list[BaseGeometry] = []
+        if isinstance(self.solid_geometry, BaseGeometry):
+            solid_geometry.append(self.solid_geometry)
+        elif isinstance(self.solid_geometry, list):
+            solid_geometry += self.solid_geometry
 
-        if type(self.solid_geometry) is list:
-            if type(geos) is list:
-                self.solid_geometry += geos
-            else:
-                self.solid_geometry.append(geos)
-        else:  # It's shapely geometry
-            self.solid_geometry = [self.solid_geometry, geos]
+        if type(geos) is list:
+            solid_geometry += geos
+        elif isinstance(geos, BaseGeometry):
+            solid_geometry.append(geos)
 
-        # flatten the self.solid_geometry list for import_dxf() to import DXF as Gerber
-        flat_geo = list(self.flatten_list(self.solid_geometry))
+        # flatten the solid_geometry list for import_dxf() to import DXF as Gerber
+        flat_geo = list(self.flatten_list(solid_geometry))
         if flat_geo:
-            self.solid_geometry = unary_union(flat_geo)
-            prepare(self.solid_geometry)
-            self.follow_geometry = self.solid_geometry
+            solid_geometry = unary_union(flat_geo)
+            prepare(solid_geometry)
+            self.solid_geometry = solid_geometry
+            self.follow_geometry = solid_geometry
         else:
             return "fail"
 
@@ -2467,10 +2467,10 @@ class Gerber(Geometry):
 
         # variables to display the percentage of work done
         self.geo_len = 0
-        try:
-            self.geo_len = len(self.solid_geometry)
-        except TypeError:
+        if isinstance(self.solid_geometry, BaseGeometry):
             self.geo_len = 1
+        else:
+            self.geo_len = len(self.solid_geometry)
 
         self.old_disp_number = 0
         self.el_count = 0
@@ -2541,10 +2541,10 @@ class Gerber(Geometry):
 
         # variables to display the percentage of work done
         self.geo_len = 0
-        try:
-            self.geo_len = len(self.solid_geometry)
-        except TypeError:
+        if isinstance(self.solid_geometry, BaseGeometry):
             self.geo_len = 1
+        else:
+            self.geo_len = len(self.solid_geometry)
 
         self.old_disp_number = 0
         self.el_count = 0
