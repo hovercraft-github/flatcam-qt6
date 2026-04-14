@@ -2097,6 +2097,10 @@ class MainGUI(QtWidgets.QMainWindow):
         self.show_text_action.setChecked(True if show_text_state == 'true' else False)
 
         self.setGeometry(win_geo[0], win_geo[1], win_geo[2], win_geo[3])
+        # Restore maximized state
+        if q_settings.value("isMaximized", False, type=bool):
+            self.showMaximized()
+
         self.app.log.debug("MainGUI.__init__() --> UI state restored from QSettings.")
 
         self.splitter.setSizes([splitter_left, 0])
@@ -4621,6 +4625,7 @@ class MainGUI(QtWidgets.QMainWindow):
             if not self.isMaximized():
                 q_settings.setValue('window_geometry', (g_rect.x(), g_rect.y(), g_rect.width(), g_rect.height()))
             q_settings.setValue('splitter_left', self.splitter.sizes()[0])
+            q_settings.setValue("isMaximized", self.isMaximized())
             # This will write the setting to the platform specific storage.
             del q_settings
             try:

@@ -869,7 +869,7 @@ class TransformUI:
 
         self.flipx_button = FCButton(_("Flip on X"))
         self.flipx_button.setToolTip(
-            _("Flip the selected object(s) over the X axis.")
+            _("Flip the selected object(s) over the Y axis.")
         )
 
         self.flipy_button = FCButton(_("Flip on Y"))
