@@ -8043,11 +8043,13 @@ def flatten_shapely_geometry(
 
     if isinstance(geometry, BaseMultipartGeometry):
         for geo in geometry.geoms:
-            assert isinstance(geo, BaseGeometry)
+            if not isinstance(geo, BaseGeometry):
+                raise NotImplementedError(f"No implementation for flattening {type(geo)}")
             flat_list.append(geo)
     elif hasattr(geometry, "__iter__"):
         for geo in geometry:
-            assert isinstance(geo, BaseGeometry)
+            if not isinstance(geo, BaseGeometry):
+                raise NotImplementedError(f"No implementation for flattening {type(geo)}")
             flat_list.append(geo)
     elif isinstance(geometry, BaseGeometry):
         if not geometry.is_empty:

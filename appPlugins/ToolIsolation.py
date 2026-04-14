@@ -1773,211 +1773,215 @@ class ToolIsolation(Gerber, AppTool):
         :return: None
         """
 
-        # use_combine: True/False
-        use_combine = args['combine'] if 'combine' in args else self.ui.combine_passes_cb.get_value()
-        # use_iso_except: True/False
-        use_iso_except = args['iso_except'] if 'iso_except' in args else self.ui.except_cb.get_value()
-        # use_extra_passes: True/False
-        use_extra_passes = args['e_passes'] if 'e_passes' in args else self.ui.pad_passes_entry.get_value()
-        # use_area_exception: True/False
-        use_area_exception = args['area_except'] if 'area_except' in args else self.ui.except_cb.get_value()
-        # sel_area_shape: ['square', 'polygon']
-        sel_area_shape = args['area_shape'] if 'area_shape' in args else self.ui.area_shape_radio.get_value()
-        # use_rest: True/False
-        use_rest = args['rest'] if 'rest' in args else self.ui.rest_cb.get_value()
-        # selection_type: [_("All"), _("Area Selection"), _("Polygon Selection"), _("Reference Object")]
-        selection_type = args['sel_type'] if 'sel_type' in args else self.ui.select_combo.get_value()
-        # tool_tip_shape: ["C1", "C2", "C3", "C4", "B", "V", "L"]
-        tool_tip_shape = args['tip_shape'] if 'tip_shape' in args else self.ui.tool_shape_combo.get_value()
-        # use simplification: True/False with simplificaiton_tol: Float
-        use_simplification = args['iso_simplification'] if 'iso_simplification' in args else \
-            self.ui.simplify_cb.get_value()
-        simplification_tol = args['simplification_tol'] if 'simplification_tol' in args else \
-            self.ui.sim_tol_entry.get_value()
+        try:
+            # use_combine: True/False
+            use_combine = args['combine'] if 'combine' in args else self.ui.combine_passes_cb.get_value()
+            # use_iso_except: True/False
+            use_iso_except = args['iso_except'] if 'iso_except' in args else self.ui.except_cb.get_value()
+            # use_extra_passes: True/False
+            use_extra_passes = args['e_passes'] if 'e_passes' in args else self.ui.pad_passes_entry.get_value()
+            # use_area_exception: True/False
+            use_area_exception = args['area_except'] if 'area_except' in args else self.ui.except_cb.get_value()
+            # sel_area_shape: ['square', 'polygon']
+            sel_area_shape = args['area_shape'] if 'area_shape' in args else self.ui.area_shape_radio.get_value()
+            # use_rest: True/False
+            use_rest = args['rest'] if 'rest' in args else self.ui.rest_cb.get_value()
+            # selection_type: [_("All"), _("Area Selection"), _("Polygon Selection"), _("Reference Object")]
+            selection_type = args['sel_type'] if 'sel_type' in args else self.ui.select_combo.get_value()
+            # tool_tip_shape: ["C1", "C2", "C3", "C4", "B", "V", "L"]
+            tool_tip_shape = args['tip_shape'] if 'tip_shape' in args else self.ui.tool_shape_combo.get_value()
+            # use simplification: True/False with simplificaiton_tol: Float
+            use_simplification = args['iso_simplification'] if 'iso_simplification' in args else \
+                self.ui.simplify_cb.get_value()
+            simplification_tol = args['simplification_tol'] if 'simplification_tol' in args else \
+                self.ui.sim_tol_entry.get_value()
 
-        # update the Common Parameters values in the self.iso_tools
-        for tool_iso in tools_storage:
-            for key in tools_storage[tool_iso]:
-                if key == 'data':
-                    tools_storage[tool_iso][key]["tools_iso_rest"] = use_rest
-                    tools_storage[tool_iso][key]["tools_iso_combine_passes"] = use_combine
-                    tools_storage[tool_iso][key]["tools_iso_simplification"] = use_simplification
-                    tools_storage[tool_iso][key]["tools_iso_simplification_tol"] = simplification_tol
-                    tools_storage[tool_iso][key]["tools_iso_isoexcept"] = use_iso_except
-                    tools_storage[tool_iso][key]["tools_iso_selection"] = selection_type
-                    tools_storage[tool_iso][key]["tools_iso_area_shape"] = sel_area_shape
-                    tools_storage[tool_iso][key]["tools_mill_job_type"] = 2  # _("Isolation")
-                    tools_storage[tool_iso][key]["tools_mill_tool_shape"] = tool_tip_shape
+            # update the Common Parameters values in the self.iso_tools
+            for tool_iso in tools_storage:
+                for key in tools_storage[tool_iso]:
+                    if key == 'data':
+                        tools_storage[tool_iso][key]["tools_iso_rest"] = use_rest
+                        tools_storage[tool_iso][key]["tools_iso_combine_passes"] = use_combine
+                        tools_storage[tool_iso][key]["tools_iso_simplification"] = use_simplification
+                        tools_storage[tool_iso][key]["tools_iso_simplification_tol"] = simplification_tol
+                        tools_storage[tool_iso][key]["tools_iso_isoexcept"] = use_iso_except
+                        tools_storage[tool_iso][key]["tools_iso_selection"] = selection_type
+                        tools_storage[tool_iso][key]["tools_iso_area_shape"] = sel_area_shape
+                        tools_storage[tool_iso][key]["tools_mill_job_type"] = 2  # _("Isolation")
+                        tools_storage[tool_iso][key]["tools_mill_tool_shape"] = tool_tip_shape
 
-        if use_combine:
-            if use_rest:
-                self.combined_rest(iso_obj=isolated_obj, iso2geo=geometry, tools_storage=tools_storage,
-                                   lim_area=limited_area, negative_dia=negative_dia,
-                                   simp_en=use_simplification, simp_tol=simplification_tol, plot=plot)
+            if use_combine:
+                if use_rest:
+                    self.combined_rest(iso_obj=isolated_obj, iso2geo=geometry, tools_storage=tools_storage,
+                                    lim_area=limited_area, negative_dia=negative_dia,
+                                    simp_en=use_simplification, simp_tol=simplification_tol, plot=plot)
+                else:
+                    self.combined_normal(iso_obj=isolated_obj, iso2geo=geometry, tools_storage=tools_storage,
+                                        sel_tools=sel_tools, iso_except=use_iso_except, lim_area=limited_area,
+                                        negative_dia=negative_dia, extra_passes=use_extra_passes,
+                                        simp_en=use_simplification, simp_tol=simplification_tol, plot=plot)
+
             else:
-                self.combined_normal(iso_obj=isolated_obj, iso2geo=geometry, tools_storage=tools_storage,
-                                     sel_tools=sel_tools, iso_except=use_iso_except, lim_area=limited_area,
-                                     negative_dia=negative_dia, extra_passes=use_extra_passes,
-                                     simp_en=use_simplification, simp_tol=simplification_tol, plot=plot)
+                prog_plot = self.app.options["tools_iso_plotting"]
 
-        else:
-            prog_plot = self.app.options["tools_iso_plotting"]
+                for tool in sel_tools:
+                    tool_data = tools_storage[tool]['data']
 
-            for tool in sel_tools:
-                tool_data = tools_storage[tool]['data']
+                    work_geo = flatten_shapely_geometry(geometry)
+                    if work_geo is None:
+                        # we do isolation over all the geometry of the Gerber object
+                        # because it is already fused together
+                        work_geo = flatten_shapely_geometry(isolated_obj.solid_geometry)
 
-                work_geo = flatten_shapely_geometry(geometry)
-                if work_geo is None:
-                    # we do isolation over all the geometry of the Gerber object
-                    # because it is already fused together
-                    work_geo = flatten_shapely_geometry(isolated_obj.solid_geometry)
+                    iso_t = {
+                        'ext':  0,
+                        'int':  1,
+                        'full': 2
+                    }[tool_data['tools_iso_isotype']]
 
-                iso_t = {
-                    'ext':  0,
-                    'int':  1,
-                    'full': 2
-                }[tool_data['tools_iso_isotype']]
+                    passes = tool_data['tools_iso_passes']
+                    overlap = tool_data['tools_iso_overlap']
+                    overlap /= 100.0
 
-                passes = tool_data['tools_iso_passes']
-                overlap = tool_data['tools_iso_overlap']
-                overlap /= 100.0
+                    milling_type = tool_data['tools_iso_milling_type']
 
-                milling_type = tool_data['tools_iso_milling_type']
+                    tool_dia = tools_storage[tool]['tooldia']
+                    for i in range(passes):
+                        iso_offset = tool_dia * ((2 * i + 1) / 2.0000001) - (i * overlap * tool_dia)
+                        if negative_dia:
+                            iso_offset = -iso_offset
 
-                tool_dia = tools_storage[tool]['tooldia']
-                for i in range(passes):
-                    iso_offset = tool_dia * ((2 * i + 1) / 2.0000001) - (i * overlap * tool_dia)
-                    if negative_dia:
-                        iso_offset = -iso_offset
+                        outname = "%s_%.*f" % (isolated_obj.obj_options["name"], self.decimals, float(tool_dia))
 
-                    outname = "%s_%.*f" % (isolated_obj.obj_options["name"], self.decimals, float(tool_dia))
+                        if passes > 1:
+                            iso_name = outname + "_iso" + str(i + 1)
+                            if iso_t == 0:
+                                iso_name = outname + "_ext_iso" + str(i + 1)
+                            elif iso_t == 1:
+                                iso_name = outname + "_int_iso" + str(i + 1)
+                        else:
+                            iso_name = outname + "_iso"
+                            if iso_t == 0:
+                                iso_name = outname + "_ext_iso"
+                            elif iso_t == 1:
+                                iso_name = outname + "_int_iso"
 
-                    if passes > 1:
-                        iso_name = outname + "_iso" + str(i + 1)
-                        if iso_t == 0:
-                            iso_name = outname + "_ext_iso" + str(i + 1)
-                        elif iso_t == 1:
-                            iso_name = outname + "_int_iso" + str(i + 1)
-                    else:
-                        iso_name = outname + "_iso"
-                        if iso_t == 0:
-                            iso_name = outname + "_ext_iso"
-                        elif iso_t == 1:
-                            iso_name = outname + "_int_iso"
+                        # if milling type is climb then the move is counter-clockwise around features
+                        mill_dir = 0 if milling_type == 'cl' else 1
 
-                    # if milling type is climb then the move is counter-clockwise around features
-                    mill_dir = 0 if milling_type == 'cl' else 1
+                        iso_geo = self.generate_envelope(isolated_obj, iso_offset, mill_dir, geometry=work_geo,
+                                                        env_iso_type=iso_t, nr_passes=i, prog_plot=prog_plot)
+                        if iso_geo == 'fail':
+                            self.app.inform.emit('[ERROR_NOTCL] %s' % _("Isolation geometry could not be generated."))
+                            continue
 
-                    iso_geo = self.generate_envelope(isolated_obj, iso_offset, mill_dir, geometry=work_geo,
-                                                     env_iso_type=iso_t, nr_passes=i, prog_plot=prog_plot)
-                    if iso_geo == 'fail':
-                        self.app.inform.emit('[ERROR_NOTCL] %s' % _("Isolation geometry could not be generated."))
-                        continue
+                        # Extra Pads isolations
+                        pad_geo = []
+                        if use_extra_passes > 0:
+                            solid_geo_union = unary_union(iso_geo)
+                            extra_geo = []
+                            for apid in isolated_obj.tools:
+                                for t_geo_dict in isolated_obj.tools[apid]['geometry']:
+                                    if isinstance(t_geo_dict['follow'], Point):
+                                        extra_geo.append(t_geo_dict['solid'])
 
-                    # Extra Pads isolations
-                    pad_geo = []
-                    if use_extra_passes > 0:
-                        solid_geo_union = unary_union(iso_geo)
-                        extra_geo = []
-                        for apid in isolated_obj.tools:
-                            for t_geo_dict in isolated_obj.tools[apid]['geometry']:
-                                if isinstance(t_geo_dict['follow'], Point):
-                                    extra_geo.append(t_geo_dict['solid'])
+                            for nr_pass in range(i, use_extra_passes + i):
+                                pad_pass_geo = []
+                                for geo in extra_geo:
+                                    iso_offset = tool_dia * ((2 * nr_pass + 1) / 2.0000001) - (
+                                            nr_pass * overlap * tool_dia)
+                                    if negative_dia:
+                                        iso_offset = -iso_offset
+                                    pad_pass_geo.append(
+                                        geo.buffer(iso_offset, int(self.app.options["gerber_circle_steps"])))
+                                pad_geo.append(unary_union(pad_pass_geo).difference(solid_geo_union))
 
-                        for nr_pass in range(i, use_extra_passes + i):
-                            pad_pass_geo = []
-                            for geo in extra_geo:
-                                iso_offset = tool_dia * ((2 * nr_pass + 1) / 2.0000001) - (
-                                        nr_pass * overlap * tool_dia)
-                                if negative_dia:
-                                    iso_offset = -iso_offset
-                                pad_pass_geo.append(
-                                    geo.buffer(iso_offset, int(self.app.options["gerber_circle_steps"])))
-                            pad_geo.append(unary_union(pad_pass_geo).difference(solid_geo_union))
+                        total_geo = []
+                        for p in flatten_shapely_geometry(iso_geo):
+                            total_geo.append(p)
 
-                    total_geo = []
-                    for p in flatten_shapely_geometry(iso_geo):
-                        total_geo.append(p)
-
-                    for p in flatten_shapely_geometry(pad_geo):
-                        total_geo.append(p)
-                    iso_geo = total_geo
-
-                    # ############################################################
-                    # ########## AREA SUBTRACTION ################################
-                    # ############################################################
-                    if use_iso_except:
-                        self.app.proc_container.update_view_text(' %s' % _("Subtracting Geo"))
-                        iso_geo = self.area_subtraction(iso_geo)
-
-                    if limited_area:
-                        self.app.proc_container.update_view_text(' %s' % _("Intersecting Geo"))
-                        iso_geo = self.area_intersection(iso_geo, intersection_geo=limited_area)
-
-                    # make sure that no empty geometry element is in the solid_geometry
-                    new_solid_geo = flatten_shapely_geometry(iso_geo)
-                    if use_simplification:
-                        new_solid_geo = [
-                            g.simplify(tolerance=simplification_tol) for g in new_solid_geo if not g.is_empty]
-
-                    tool_data.update({
-                        "name": iso_name,
-                    })
-
-                    def iso_init(geo_obj, fc_obj):
-                        # Propagate options
-                        geo_obj.obj_options["tools_mill_tooldia"] = str(tool_dia)
-                        tool_data["tools_mill_tooldia"] = float(tool_dia)
-
-                        geo_obj.solid_geometry = flatten_shapely_geometry(new_solid_geo)
+                        for p in flatten_shapely_geometry(pad_geo):
+                            total_geo.append(p)
+                        iso_geo = total_geo
 
                         # ############################################################
                         # ########## AREA SUBTRACTION ################################
                         # ############################################################
-                        if use_area_exception:
+                        if use_iso_except:
                             self.app.proc_container.update_view_text(' %s' % _("Subtracting Geo"))
-                            geo_obj.solid_geometry = self.area_subtraction(geo_obj.solid_geometry)
+                            iso_geo = self.area_subtraction(iso_geo)
 
-                        geo_obj.tools = {
-                            1: {
-                                'tooldia':          float(tool_dia),
-                                'data':             tool_data,
-                                'solid_geometry':   flatten_shapely_geometry(geo_obj.solid_geometry)
+                        if limited_area:
+                            self.app.proc_container.update_view_text(' %s' % _("Intersecting Geo"))
+                            iso_geo = self.area_intersection(iso_geo, intersection_geo=limited_area)
+
+                        # make sure that no empty geometry element is in the solid_geometry
+                        new_solid_geo = flatten_shapely_geometry(iso_geo)
+                        if use_simplification:
+                            new_solid_geo = [
+                                g.simplify(tolerance=simplification_tol) for g in new_solid_geo if not g.is_empty]
+
+                        tool_data.update({
+                            "name": iso_name,
+                        })
+
+                        def iso_init(geo_obj, fc_obj):
+                            # Propagate options
+                            geo_obj.obj_options["tools_mill_tooldia"] = str(tool_dia)
+                            tool_data["tools_mill_tooldia"] = float(tool_dia)
+
+                            geo_obj.solid_geometry = flatten_shapely_geometry(new_solid_geo)
+
+                            # ############################################################
+                            # ########## AREA SUBTRACTION ################################
+                            # ############################################################
+                            if use_area_exception:
+                                self.app.proc_container.update_view_text(' %s' % _("Subtracting Geo"))
+                                geo_obj.solid_geometry = self.area_subtraction(geo_obj.solid_geometry)
+
+                            geo_obj.tools = {
+                                1: {
+                                    'tooldia':          float(tool_dia),
+                                    'data':             tool_data,
+                                    'solid_geometry':   flatten_shapely_geometry(geo_obj.solid_geometry)
+                                }
                             }
-                        }
 
-                        # detect if solid_geometry is empty
-                        empty_cnt = 0
-                        for g in geo_obj.solid_geometry:
-                            if g:
-                                break
-                            else:
-                                empty_cnt += 1
+                            # detect if solid_geometry is empty
+                            empty_cnt = 0
+                            for g in geo_obj.solid_geometry:
+                                if g:
+                                    break
+                                else:
+                                    empty_cnt += 1
 
-                        if empty_cnt == len(geo_obj.solid_geometry):
-                            msg = '[ERROR_NOTCL] %s: %s' % (_("Empty Geometry in"), geo_obj.obj_options["name"])
-                            fc_obj.inform.emit(msg)
-                            return 'fail'
-                        else:
-                            if self.validation_status:
-                                msg = '[success] %s: %s' % (_("Isolation geometry created"),
-                                                            geo_obj.obj_options["name"])
+                            if empty_cnt == len(geo_obj.solid_geometry):
+                                msg = '[ERROR_NOTCL] %s: %s' % (_("Empty Geometry in"), geo_obj.obj_options["name"])
                                 fc_obj.inform.emit(msg)
-                        geo_obj.multigeo = True
+                                return 'fail'
+                            else:
+                                if self.validation_status:
+                                    msg = '[success] %s: %s' % (_("Isolation geometry created"),
+                                                                geo_obj.obj_options["name"])
+                                    fc_obj.inform.emit(msg)
+                            geo_obj.multigeo = True
 
-                    a_select = True if self.validation_status else False
-                    self.app.app_obj.new_object("geometry", iso_name, iso_init, plot=plot, autoselected=a_select)
+                        a_select = True if self.validation_status else False
+                        self.app.app_obj.new_object("geometry", iso_name, iso_init, plot=plot, autoselected=a_select)
 
-            # clean the progressive plotted shapes if it was used
+                # clean the progressive plotted shapes if it was used
 
-            if plot and prog_plot == 'progressive':
-                try:
-                    self.temp_shapes.clear(update=True)
-                except Exception as err:
-                    self.app.log.debug("ToolIsolation.isolate(). Clear temp_shapes -> %s" % str(err))
+                if plot and prog_plot == 'progressive':
+                    try:
+                        self.temp_shapes.clear(update=True)
+                    except Exception as err:
+                        self.app.log.debug("ToolIsolation.isolate(). Clear temp_shapes -> %s" % str(err))
 
-        # Switch notebook to Properties page
-        # self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
+            # Switch notebook to Properties page
+            # self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
+        except Exception as e:
+            self.app.log.error(str(e))
+            self.app.inform.emit('[ERROR_NOTCL] %s' % _("Error during isolation: %s") % str(e))
 
     def combined_rest(self, iso_obj, iso2geo, tools_storage, lim_area, negative_dia=None,
                       simp_en=False, simp_tol=0.001, plot=True):
@@ -2001,7 +2005,7 @@ class ToolIsolation(Gerber, AppTool):
         :param plot:            if to plot the resulting geometry object
         :type plot:             bool
         :return:                Isolated solid geometry
-        :rtype:
+        :rtype:                 list of Shapely Polygon
         """
 
         self.app.log.debug("ToolIsolation.combine_rest()")
@@ -2289,7 +2293,7 @@ class ToolIsolation(Gerber, AppTool):
                     for geo in iso_geo.geoms:
                         solid_geo.append(geo)
                 else:
-                    solid_geo.append(iso_geo)
+                    solid_geo.extend(iso_geo) if isinstance(iso_geo, list) else solid_geo.append(iso_geo)
 
             # Extra Pads isolations
             pad_geo = []
