@@ -89,6 +89,7 @@ class AppDefaults:
         "global_systray_icon": True,
         "global_shell_at_startup": False,  # Show the shell at startup.
         "global_project_at_startup": False,
+        "global_reopen_last_project": False,  # Re-open the most recent project on startup.
         "global_version_check": True,
         "global_send_stats": True,
         "global_worker_number": min(4, max(2, int((os.cpu_count()) / 2))) if os.cpu_count() else 2,

@@ -1488,6 +1488,16 @@ class App(QtCore.QObject):
         # the path/file_name must be enclosed in quotes, if it contains spaces
         if App.args:    # noqa
             self.args_at_startup.emit(App.args)     # noqa
+        else:
+            # Re-open the most recent project on startup if the option is enabled
+            if self.options.get("global_reopen_last_project", False) and self.recent_projects:
+                for recent in self.recent_projects:
+                    if recent.get('kind') == 'project':
+                        recent_filename = recent.get('filename', '')
+                        if recent_filename and os.path.exists(recent_filename):
+                            self.log.debug("Re-opening last project on startup: %s" % recent_filename)
+                            self.f_handlers.open_project(filename=recent_filename, run_from_arg=True)
+                        break
 
         if self.defaults.old_defaults_found is True:
             self.inform.emit('[WARNING_NOTCL] %s' % _("Found old default preferences files. "

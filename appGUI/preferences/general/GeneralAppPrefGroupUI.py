@@ -249,14 +249,23 @@ class GeneralAppPrefGroupUI(OptionsGroupUI):
         )
 
         grid4.addWidget(self.shell_startup_cb, 4, 0, 1, 2)
-
         # Project at StartUp CB
         self.project_startup_cb = FCCheckBox(label='%s' % _('Show Project'))
         self.project_startup_cb.setToolTip(
             _("Check this box if you want the project/selected/tool tab area to\n"
               "to be shown automatically at startup.")
         )
+
         grid4.addWidget(self.project_startup_cb, 6, 0, 1, 2)
+
+        # Re-open Last Project at StartUp CB
+        self.reopen_last_project_cb = FCCheckBox(label='%s' % _('Re-open Last Project'))
+        self.reopen_last_project_cb.setToolTip(
+            _("Check this box if you want the most recent project\n"
+              "to be re-opened automatically at startup.")
+        )
+
+        grid4.addWidget(self.reopen_last_project_cb, 7, 0, 1, 2)
 
         # Version Check CB
         self.version_check_cb = FCCheckBox(label='%s' % _('Version Check'))

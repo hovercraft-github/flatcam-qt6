@@ -67,6 +67,7 @@ class PreferencesUIManager(QtCore.QObject):
             "global_systray_icon": self.ui.general_pref_form.general_app_group.systray_cb,
             "global_shell_at_startup": self.ui.general_pref_form.general_app_group.shell_startup_cb,
             "global_project_at_startup": self.ui.general_pref_form.general_app_group.project_startup_cb,
+            "global_reopen_last_project": self.ui.general_pref_form.general_app_group.reopen_last_project_cb,
             "global_version_check": self.ui.general_pref_form.general_app_group.version_check_cb,
             "global_send_stats": self.ui.general_pref_form.general_app_group.send_stats_cb,
 
