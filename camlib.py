@@ -524,7 +524,14 @@ class ApertureMacro:
                 if self.geometry.is_empty:
                     self.geometry = prim_geo['geometry']
                     continue
-                self.geometry = union(self.geometry, prim_geo['geometry'])
+                ugeo = union(self.geometry, prim_geo['geometry'])
+                # The union function can produce a GeometryCollection when the two polygons share a vertex like this |><|
+                # See https://bitbucket.org/marius_stanciu/flatcam_beta/issues/59.
+                if not isinstance(ugeo, Polygon):
+                    log.debug("Translating geometry primitive %s to avoid GeometryCollection.", prim_geo["geometry"])
+                    prim_geo["geometry"] = affinity.translate(prim_geo["geometry"], xoff=0.0001)
+                    ugeo = union(self.geometry, prim_geo['geometry'])
+                self.geometry = ugeo
                 continue
             if prim_geo['pol'] == 0:
                 self.geometry = difference(self.geometry, prim_geo['geometry'])
