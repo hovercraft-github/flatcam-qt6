@@ -1,6 +1,6 @@
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QThread, Qt
 
 from appEditors.appExcEditor import AppExcEditor
 from appEditors.appGeoEditor import AppGeoEditor
@@ -9,6 +9,7 @@ from appEditors.appGerberEditor import AppGerberEditor
 from appGUI.GUIElements import FCFileSaveDialog, FCMessageBox
 from camlib import to_dict, dict2obj, ET, ParseError
 from appParsers.ParseHPGL2 import HPGL2
+from appHandlers.appIOCompletion import appIOCompletionTimer
 
 from appObjects.ObjectCollection import GerberObject, ExcellonObject, GeometryObject, ScriptObject, CNCJobObject
 
@@ -53,6 +54,7 @@ import typing
 
 if typing.TYPE_CHECKING:
     import appMain
+    from appMain import App
 
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
@@ -60,7 +62,7 @@ if '_' not in builtins.__dict__:
 
 
 class appIO(QtCore.QObject):
-    def __init__(self, app):
+    def __init__(self, app: 'App'):
         """
         A class that holds all the menu -> file handlers
         """
@@ -2510,10 +2512,12 @@ class appIO(QtCore.QObject):
 
         # for some reason, setting ui_title does not work when this method is called from Tcl Shell
         # it's because the TclCommand is run in another thread (it inherit TclCommandSignaled)
-        if cli is None:
+        if self.app.ui and self.app.main_thread and QThread.currentThread() == self.app.main_thread:
             self.app.ui.set_ui_title(name=_("Loading Project ... Please Wait ..."))
+        else:
+            self.app.log.warning("appIO.open_project() is called from non-GUI thread.")
 
-        if run_from_arg:
+        if run_from_arg and self.splash:
             self.splash.showMessage('%s: %ssec\n%s' % (_("Canvas initialization started.\n"
                                                          "Canvas initialization finished in"),
                                                        '%.2f' % self.app.used_time,
@@ -2729,19 +2733,20 @@ class appIO(QtCore.QObject):
                             # CNCJob.set_ui()
                             new_obj.is_loaded_from_project = True
 
-                    # for some reason, setting ui_title does not work when this method is called from Tcl Shell
-                    # it's because the TclCommand is run in another thread (it inherits TclCommandSignaled)
-                    try:
-                        if cli is None:
+                    def set_ui_title():
+                        """
+                        This must run from the main UI thread.
+                        One can ofcourse crearte a signal/slot pair for this but using appIOCompletionTimer is better solution.
+                        """
+                        if self.app.ui:
                             self.app.ui.set_ui_title(name="{} {}: {}".format(
                                 _("Loading Project ... restoring"), obj['kind'].upper(), obj_name))
 
+                    appIOCompletionTimer(set_ui_title, target_thread=self.app.main_thread, interval_ms=20).wait(timeout_ms=100)
+                    try:
                         ret = self.app.app_obj.new_object(obj['kind'], obj['obj_options']['name'], obj_init, plot=plot)
                     except KeyError:
                         # allowance for older projects
-                        if cli is None:
-                            self.app.ui.set_ui_title(name="{} {}: {}".format(
-                                _("Loading Project ... restoring"), obj['kind'].upper(), obj_name))
                         try:
                             ret = self.app.app_obj.new_object(obj['kind'], obj_name, obj_init, plot=plot)
                         except Exception:
@@ -2749,20 +2754,36 @@ class appIO(QtCore.QObject):
                     if ret == 'fail':
                         continue
 
-                self.inform.emit('[success] %s: %s' % (_("Project loaded from"), filename))
+                objects_restored = len(proj_dict['objs'])
+                t0 = time.perf_counter()
 
-                self.app.should_we_save = False
-                self.app.file_opened.emit("project", filename)
+                def check_load_complete() -> bool:
+                    total, loaded = self.app.collection.count_objects()
+                    ret = total >= objects_restored and loaded >= total
+                    if not ret:
+                        return ret
+                    self.log.debug("All objects loaded. Total: %s, Loaded: %s, Time: %.2f seconds" %
+                                (total, loaded, time.perf_counter() - t0))
+                    self.inform.emit('[success] %s: %s' % (_("Project loaded from"), filename))
 
-                # restore auto-saving after a project was loaded
-                self.app.block_autosave = False
+                    self.app.file_opened.emit("project", filename)
 
-                # for some reason, setting ui_title does not work when this method is called from Tcl Shell
-                # it's because the TclCommand is run in another thread (it inherit TclCommandSignaled)
-                if cli is None:
+                    # Reset changes flag
+                    self.app.should_we_save = False
+                    # Reset autosave blocking flag used during project loading
+                    self.app.block_autosave = False
+
                     self.app.ui.set_ui_title(name=self.app.project_filename)
 
-                self.log.debug(" **************** Finished PROJECT loading... **************** ")
+                    self.log.debug(" **************** Finished PROJECT loading... **************** ")
+                    return ret
+
+                waiter = appIOCompletionTimer(check_load_complete, target_thread=self.app.main_thread)
+                if not waiter.wait(timeout_ms=60000):
+                    self.log.error("Project loading timed out after 60 seconds. Some objects may not be loaded.")
+                    waiter.stop()
+                else:
+                    self.log.debug("Project loading wait complete. Time: %.2f seconds" % (time.perf_counter() - t0))
 
         self.app.worker_task.emit({'fcn': worker_task, 'params': []})
 
