@@ -7,9 +7,10 @@
 # Modified by Marius Stanciu (2019)                         #
 # ###########################################################
 
-from PyQt6 import QtGui, QtWidgets  # noqa
+from PyQt6 import QtGui, QtWidgets, QtCore  # noqa
 from PyQt6.QtCore import QSettings, pyqtSlot    # noqa
 from PyQt6.QtCore import Qt, pyqtSignal, QMetaObject    # noqa
+from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR
 
 import os.path
 import sys
@@ -20,6 +21,7 @@ import urllib.error
 
 from datetime import datetime as dt
 from copy import deepcopy, copy
+from logging import Logger
 import numpy as np
 
 import getopt
@@ -317,7 +319,7 @@ class App(QtCore.QObject):
         # =========================================================================
 
         # Logging
-        self.log = None
+        self.log: Logger | AppLogging = None
 
         # Editors (instantiated later)
         self.exc_editor = None
@@ -430,9 +432,9 @@ class App(QtCore.QObject):
         # Preferences/collection
         self.defaults = None
         self.options: dict | AppOptions = {}
-        self.app_units = None
-        self.default_units = None
-        self.decimals = None
+        self.app_units: str = None
+        self.default_units: str = None
+        self.decimals: int = None
         self.resource_location = None
         self._current_theme = None
         self.preferencesUiManager = None
@@ -3205,11 +3207,15 @@ class App(QtCore.QObject):
                 tab_widget = QtWidgets.QTabWidget()
                 description_label = FCLabel(
                     "FlatCAM Evo {version} {beta} ({date}) - {arch}<br>"
+                    "QT version: {qt_version}<br>"
+                    "PyQt version: {pyqt_version}<br>"
                     "<a href = \"http://flatcam.org/\">http://flatcam.org</a><br>".format(
                         version=version,
                         beta=('BETA' if beta else ''),
                         date=version_date,
-                        arch=platform.architecture()[0])
+                        arch=platform.architecture()[0],
+                        qt_version=QT_VERSION_STR,
+                        pyqt_version=PYQT_VERSION_STR)
                 )
                 description_label.setOpenExternalLinks(True)
 
