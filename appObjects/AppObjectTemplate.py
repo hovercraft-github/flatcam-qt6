@@ -28,6 +28,10 @@ import gettext
 import appTranslation as fcTranslate
 import builtins
 
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
+
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
     _ = gettext.gettext
@@ -54,7 +58,7 @@ class FlatCAMObj(QtCore.QObject):
 
     # Instance of the application to which these are related.
     # The app should set this value.
-    app = None
+    app: "App"
 
     # signal to plot a single object
     plot_single_object = QtCore.pyqtSignal()
@@ -73,13 +77,13 @@ class FlatCAMObj(QtCore.QObject):
 
         super().__init__(app=app)
 
-        self.app = app
+        FlatCAMObj.app = app
 
         # View
         self.ui = None
 
         # set True by the collection.append() when the object load is complete
-        self.load_complete = None
+        self.load_complete: bool = False
 
         self.obj_options = LoudDict(name=name)
         self.obj_options.set_change_callback(self.on_options_change)
@@ -133,6 +137,9 @@ class FlatCAMObj(QtCore.QObject):
 
     def __str__(self):
         return "<FlatCAMObj({:12s}): {:20s}>".format(self.kind, self.obj_options["name"])
+
+    def convert_units(self, units):
+        pass
 
     def from_dict(self, d):
         """

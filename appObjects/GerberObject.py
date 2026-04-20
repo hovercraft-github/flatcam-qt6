@@ -28,6 +28,10 @@ import gettext
 import appTranslation as fcTranslate
 import builtins
 
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
+
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
     _ = gettext.gettext
@@ -44,11 +48,10 @@ class GerberObject(FlatCAMObj, Gerber):
 
     ui_type = GerberObjectUI
 
-    def __init__(self, name, app):
-        self.app = app
-        self.decimals = self.app.decimals
+    def __init__(self, name, app: "App"):
+        self.decimals = app.decimals
 
-        self.circle_steps = int(self.app.options["gerber_circle_steps"])
+        self.circle_steps = int(app.options["gerber_circle_steps"])
 
         Gerber.__init__(self, steps_per_circle=self.circle_steps, app=app)
         FlatCAMObj.__init__(self, name, app=app)

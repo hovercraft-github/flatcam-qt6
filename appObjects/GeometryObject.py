@@ -21,8 +21,6 @@ from shapely.ops import unary_union
 
 from camlib import Geometry, flatten_shapely_geometry, translate_geometry
 
-import shapely
-
 import re
 import ezdxf
 import numpy as np
@@ -34,6 +32,10 @@ from functools import reduce
 import gettext
 import appTranslation as fcTranslate
 import builtins
+
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
 
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
@@ -51,11 +53,10 @@ class GeometryObject(FlatCAMObj, Geometry):
 
     ui_type = GeometryObjectUI
 
-    def __init__(self, name, app):
-        self.app = app
-        self.decimals = self.app.decimals
+    def __init__(self, name, app: "App"):
+        self.decimals = app.decimals
 
-        self.circle_steps = int(self.app.options["geometry_circle_steps"])
+        self.circle_steps = int(app.options["geometry_circle_steps"])
 
         FlatCAMObj.__init__(self, name, app=app)
         Geometry.__init__(self, geo_steps_per_circle=self.circle_steps, app=app)

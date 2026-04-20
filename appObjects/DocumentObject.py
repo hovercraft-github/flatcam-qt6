@@ -15,10 +15,15 @@ from PyQt6.QtCore import Qt
 from appEditors.appTextEditor import AppTextEditor
 from appObjects.AppObjectTemplate import *
 from appGUI.ObjectUI import DocumentObjectUI
+from appObjects.AppObjectTemplate import FlatCAMObj
 
 import gettext
 import appTranslation as fcTranslate
 import builtins
+
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
 
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
@@ -32,11 +37,10 @@ class DocumentObject(FlatCAMObj):
     optionChanged = QtCore.pyqtSignal(str)
     ui_type = DocumentObjectUI
 
-    def __init__(self, name, app):
-        self.app = app
-        self.decimals = self.app.decimals
+    def __init__(self, name, app: "App"):
+        self.decimals = app.decimals
 
-        self.app.log.debug("Creating a Document object...")
+        app.log.debug("Creating a Document object...")
         FlatCAMObj.__init__(self, name, app)
 
         self.kind = "document"
@@ -55,6 +59,9 @@ class DocumentObject(FlatCAMObj):
 
         self._read_only = False
         self.units_found = self.app.app_units
+
+    def convert_units(self, units):
+        pass
 
     def set_ui(self, ui):
         FlatCAMObj.set_ui(self, ui)

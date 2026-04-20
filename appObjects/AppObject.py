@@ -24,6 +24,10 @@ from copy import deepcopy
 import gettext
 import appTranslation as fcTranslate
 import builtins
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
+
 
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
@@ -46,7 +50,7 @@ class AppObject(QtCore.QObject):
 
     plots_updated = QtCore.pyqtSignal()
 
-    def __init__(self, app):
+    def __init__(self, app: "App"):
         super(AppObject, self).__init__()
         self.app = app
         self.inform = app.inform
@@ -110,8 +114,10 @@ class AppObject(QtCore.QObject):
 
         self.app.log.debug("Calling object constructor...")
 
+        if typing.TYPE_CHECKING:
+            from appObjects.AppObjectTemplate import FlatCAMObj
         # Object creation/instantiation
-        obj = classdict[kind](name, app=self.app)
+        obj: "FlatCAMObj" = classdict[kind](name, app=self.app)
 
         # ############################################################################################################
         # adding object PROPERTIES

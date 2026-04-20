@@ -595,7 +595,7 @@ class ObjectCollection(QtCore.QAbstractItemModel):
             return Qt.ItemFlag.ItemIsEnabled
         # return QtWidgets.QAbstractItemModel.flags(self, index)
 
-    def append(self, obj, active=False, to_index=None):
+    def append(self, obj: FlatCAMObj, active=False, to_index=None):
         self.app.log.debug(str(inspect.stack()[1][3]) + " --> OC.append()")
 
         name = obj.obj_options["name"]
@@ -1084,6 +1084,18 @@ class ObjectCollection(QtCore.QAbstractItemModel):
                 obj_list.append(item.obj)
 
         return obj_list
+
+    def count_objects(self) -> tuple[int, int]:
+        """
+        Returns:
+            tuple[int, int]: A tuple containing the total number of objects and the number of objects that have completed loading.
+        """
+        obj_list = self.get_list()
+        count = 0
+        for obj in obj_list:
+            if obj.load_complete:
+                count += 1
+        return len(obj_list), count
 
     def update_view(self):
         self.layoutChanged.emit()

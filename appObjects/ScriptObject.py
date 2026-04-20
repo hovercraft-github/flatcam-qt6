@@ -20,6 +20,10 @@ import gettext
 import appTranslation as fcTranslate
 import builtins
 
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
+
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
     _ = gettext.gettext
@@ -32,11 +36,10 @@ class ScriptObject(FlatCAMObj):
     optionChanged = QtCore.pyqtSignal(str)
     ui_type = ScriptObjectUI
 
-    def __init__(self, name, app):
-        self.app = app
-        self.decimals = self.app.decimals
+    def __init__(self, name, app: "App"):
+        self.decimals = app.decimals
 
-        self.app.log.debug("Creating a ScriptObject object...")
+        app.log.debug("Creating a ScriptObject object...")
         FlatCAMObj.__init__(self, name, app=app)
 
         self.kind = "script"
@@ -57,6 +60,9 @@ class ScriptObject(FlatCAMObj):
         self.script_filename = ''
 
         self.units_found = self.app.app_units
+
+    def convert_units(self, units):
+        pass
 
     def set_ui(self, ui):
         """

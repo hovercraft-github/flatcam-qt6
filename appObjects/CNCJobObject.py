@@ -31,6 +31,10 @@ import gettext
 import appTranslation as fcTranslate
 import builtins
 
+import typing
+if typing.TYPE_CHECKING:
+    from appMain import App
+
 fcTranslate.apply_language('strings')
 if '_' not in builtins.__dict__:
     _ = gettext.gettext
@@ -45,18 +49,17 @@ class CNCJobObject(FlatCAMObj, CNCjob):
 
     ui_type = CNCObjectUI
 
-    def __init__(self, name, app, units="in", kind="generic", z_move=0.1,
+    def __init__(self, name, app: "App", units="in", kind="generic", z_move=0.1,
                  feedrate=3.0, feedrate_rapid=3.0, z_cut=-0.002, tooldia=0.0,
                  spindlespeed=None):
 
-        self.app = app
-        self.app.log.debug("Creating CNCJob object...")
+        app.log.debug("Creating CNCJob object...")
 
-        self.decimals = self.app.decimals
+        self.decimals = app.decimals
 
         CNCjob.__init__(self, app=app, units=units, kind=kind, z_move=z_move,
                         feedrate=feedrate, feedrate_rapid=feedrate_rapid, z_cut=z_cut, tooldia=tooldia,
-                        spindlespeed=spindlespeed, steps_per_circle=int(self.app.options["cncjob_steps_per_circle"]))
+                        spindlespeed=spindlespeed, steps_per_circle=int(app.options["cncjob_steps_per_circle"]))
 
         FlatCAMObj.__init__(self, name, app)
 
