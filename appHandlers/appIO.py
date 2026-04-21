@@ -79,6 +79,78 @@ class appIO(QtCore.QObject):
 
         self.app.new_project_signal.connect(self.on_new_project_house_keeping)
 
+        # Options that should not be stored in the project:
+        # All settings from the General preferences tab are excluded because they are
+        # application-level preferences (not project-specific) and should be loaded
+        # from the user's own defaults when opening a project.
+        self.project_exclude_keys = [
+                # General App Preferences
+                'units_precision',
+                'global_graphic_engine',
+                'global_graphic_engine_3d_no_mp',
+                'global_app_level',
+                'global_log_verbose',
+                'global_portable',
+                'global_language_current',
+                'global_systray_icon',
+                'global_shell_at_startup',
+                'global_project_at_startup',
+                'global_reopen_last_project',
+                'global_version_check',
+                'global_send_stats',
+                'global_worker_number',
+                'global_process_number',
+                'global_tolerance',
+                'global_compression_level',
+                'global_save_compressed',
+                'global_autosave',
+                'global_autosave_timeout',
+                'global_tpdf_tmargin',
+                'global_tpdf_bmargin',
+                'global_tpdf_lmargin',
+                'global_tpdf_rmargin',
+                # General GUI Preferences
+                'global_appearance',
+                'global_dark_canvas',
+                'global_layout',
+                'global_hover_shape',
+                'global_selection_shape',
+                'global_selection_shape_as_line',
+                'global_gui_layout',
+                'global_sel_fill',
+                'global_sel_line',
+                'global_alt_sel_fill',
+                'global_alt_sel_line',
+                'global_draw_color',
+                'global_sel_draw_color',
+                'global_proj_item_color_light',
+                'global_proj_item_dis_color_light',
+                'global_proj_item_color_dark',
+                'global_proj_item_dis_color_dark',
+                'global_project_autohide',
+                # General App Settings
+                'global_gridx',
+                'global_gridy',
+                'global_snap_max',
+                'global_workspace',
+                'global_workspaceT',
+                'global_workspace_orientation',
+                'global_axis_color',
+                'global_cursor_type',
+                'global_cursor_size',
+                'global_cursor_width',
+                'global_cursor_color_enabled',
+                'global_cursor_color',
+                'global_pan_button',
+                'global_mselect_key',
+                'global_delete_confirmation',
+                'global_allow_edit_in_project_tab',
+                'global_open_style',
+                'global_toggle_tooltips',
+                'global_bookmarks_limit',
+                'global_activity_icon',
+            ]
+
     def on_file_open_gerber(self, name=None):
         """
         File menu callback for opening a Gerber.
@@ -2635,7 +2707,8 @@ class appIO(QtCore.QObject):
                 # self.app.defaults.update(self.app.options)
                 # self.app.preferencesUiManager.save_defaults()
                 # Project options
-                self.app.options.update(proj_dict['options'])
+                project_related_options = {k: v for k, v in proj_dict['options'].items() if k not in self.project_exclude_keys}
+                self.app.options.update(project_related_options)
             if response == bt_no:
                 pass
         else:
@@ -2814,7 +2887,7 @@ class appIO(QtCore.QObject):
             except Exception as e:
                 self.log.error("save_project() --> There was no active object. Skipping read_form. %s" % str(e))
 
-            app_options = {k: v for k, v in self.app.options.items()}
+            app_options = {k: v for k, v in self.app.options.items() if k not in self.project_exclude_keys}
             d = {
                 "objs":             [obj.to_dict() for obj in self.app.collection.get_list()],
                 "options":          app_options,
