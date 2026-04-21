@@ -4310,6 +4310,31 @@ class FCTable(QtWidgets.QTableWidget):
         self.rows_dragged = None
 
     @property
+    def col_names(self):
+        """
+        Returns the names of the columns in the table.
+        """
+        col_names = []
+        for col in range(self.columnCount()):
+            col_header = self.horizontalHeaderItem(col)
+            col_names.append(col_header.text() if col_header else str(col))
+        return col_names
+
+    @property
+    def items(self) -> list[list[QtWidgets.QTableWidgetItem]]:
+        """
+        Returns all items in the table as a list of lists.
+        Each inner list represents a row of items.
+        """
+        all_items = []
+        for row in range(self.rowCount()):
+            row_items = []
+            for col in range(self.columnCount()):
+                row_items.append(self.item(row, col))
+            all_items.append(row_items)
+        return all_items
+
+    @property
     def drag_drop(self):
         return self._is_drag_drop_enabled
 

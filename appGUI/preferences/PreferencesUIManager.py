@@ -1018,6 +1018,8 @@ class PreferencesUIManager(QtCore.QObject):
                 self.ui.app.log.debug("Nothing to remove")
             self.ui.fa_scroll_area.setWidget(fa_form)
             fa_form.show()
+        # self.defaults_write_form(source_dict=self.defaults.current_defaults)
+        self.pref_connect_on_changes()
 
     def __init_color_pickers(self):
         # Init Gerber Plot Colors
@@ -1117,9 +1119,6 @@ class PreferencesUIManager(QtCore.QObject):
     def on_save_button(self, save_to_file=True):
         self.ui.app.log.debug("on_save_button() --> Applying preferences to file.")
 
-        # Preferences saved, update flag
-        self.preferences_changed_flag = False
-
         # Preferences save, update the color of the Preferences Tab text
         for idx in range(self.ui.plot_tab_area.count()):
             if self.ui.plot_tab_area.tabText(idx) == _("Preferences"):
@@ -1204,6 +1203,7 @@ class PreferencesUIManager(QtCore.QObject):
         # #############################################################################################################
 
         if save_to_file or should_restart is True:
+            self.preferences_changed_flag = True
             self.save_defaults(silent=False)
             # load the defaults so they are updated into the app
             saved_filename_path = os.path.join(self.data_path, 'current_defaults_%s.FlatConfig' % self.defaults.version)
@@ -1230,13 +1230,13 @@ class PreferencesUIManager(QtCore.QObject):
         # This will write the setting to the platform specific storage.
         del settgs
 
-        if save_to_file:
-            # close the tab and delete it
-            for idx in range(self.ui.plot_tab_area.count()):
-                if self.ui.plot_tab_area.tabText(idx) == _("Preferences"):
-                    self.ui.plot_tab_area.tabBar.setTabTextColor(idx, self.old_color)
-                    self.ui.plot_tab_area.closeTab(idx)
-                    break
+        # if save_to_file:
+        # close the tab and delete it
+        for idx in range(self.ui.plot_tab_area.count()):
+            if self.ui.plot_tab_area.tabText(idx) == _("Preferences"):
+                self.ui.plot_tab_area.tabBar.setTabTextColor(idx, self.old_color)
+                self.ui.plot_tab_area.closeTab(idx)
+                break
 
         if should_restart is True:
             self.ui.app.on_app_restart()
@@ -1267,6 +1267,8 @@ class PreferencesUIManager(QtCore.QObject):
         :param first_time:  Boolean. If True will execute some code when the app is run first time
         :return:            None
         """
+        if not self.preferences_changed_flag:
+            return
         self.ui.app.log.debug("App.PreferencesUIManager.save_defaults()")
 
         if data_path is None:
@@ -1284,6 +1286,7 @@ class PreferencesUIManager(QtCore.QObject):
             self.inform.emit('[ERROR_NOTCL] %s %s' % (_("Failed to write defaults to file."), str(filename)))
             return
 
+        self.preferences_changed_flag = False
         if not silent:
             self.inform.emit('[success] %s' % _("Preferences saved."))
 
@@ -1299,7 +1302,7 @@ class PreferencesUIManager(QtCore.QObject):
         if isinstance(self.sender(), QtWidgets.QScrollBar):
             return
 
-        if self.preferences_changed_flag is False:
+        if not self.preferences_changed_flag:
             self.inform.emit('[WARNING_NOTCL] %s' % _("Preferences edited but not saved."))
 
             for idx in range(self.ui.plot_tab_area.count()):
@@ -1311,6 +1314,54 @@ class PreferencesUIManager(QtCore.QObject):
             self.ui.pref_apply_button.setIcon(QtGui.QIcon(self.ui.app.resource_location + '/apply_red32.png'))
 
             self.preferences_changed_flag = True
+
+    def pref_connect_on_changes(self):
+        for idx in range(self.ui.pref_tab_area.count()):
+            for tb in self.ui.pref_tab_area.widget(idx).findChildren(QtWidgets.QWidget):
+                try:
+                    try:
+                        tb.textEdited.disconnect(self.on_preferences_edited)
+                    except (TypeError, AttributeError):
+                        pass
+                    tb.textEdited.connect(self.on_preferences_edited)
+                except AttributeError:
+                    pass
+
+                try:
+                    try:
+                        tb.modificationChanged.disconnect(self.on_preferences_edited)
+                    except (TypeError, AttributeError):
+                        pass
+                    tb.modificationChanged.connect(self.on_preferences_edited)
+                except AttributeError:
+                    pass
+
+                try:
+                    try:
+                        tb.toggled.disconnect(self.on_preferences_edited)
+                    except (TypeError, AttributeError):
+                        pass
+                    tb.toggled.connect(self.on_preferences_edited)
+                except AttributeError:
+                    pass
+
+                try:
+                    try:
+                        tb.valueChanged.disconnect(self.on_preferences_edited)
+                    except (TypeError, AttributeError):
+                        pass
+                    tb.valueChanged.connect(self.on_preferences_edited)
+                except AttributeError:
+                    pass
+
+                try:
+                    try:
+                        tb.currentIndexChanged.disconnect(self.on_preferences_edited)
+                    except (TypeError, AttributeError):
+                        pass
+                    tb.currentIndexChanged.connect(self.on_preferences_edited)
+                except AttributeError:
+                    pass
 
     def on_close_preferences_tab(self, parent):
         self.ui.app.log.debug("Preferences GUI was closed.")

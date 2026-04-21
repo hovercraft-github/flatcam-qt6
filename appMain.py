@@ -3121,7 +3121,8 @@ class App(QtCore.QObject):
         if record in self.recent:
             return
         if record in self.recent_projects:
-            return
+            index = self.recent_projects.index(record)
+            self.recent_projects.pop(index)
 
         if record['kind'] == 'project':
             self.recent_projects.insert(0, record)
@@ -3134,23 +3135,24 @@ class App(QtCore.QObject):
         if len(self.recent_projects) > self.options['global_recent_limit']:  # Limit reached
             self.recent_projects.pop()
 
-        try:
-            with open(os.path.join(self.data_path, 'recent.json'), 'w') as f:
-                json.dump(self.recent, f, default=to_dict, indent=2, sort_keys=True)
-        except IOError:
-            self.log.error("Failed to open recent items file for writing.")
-            self.inform.emit('[ERROR_NOTCL] %s' %
-                             _('Failed to open recent files file for writing.'))
-            return
-
-        try:
-            with open(os.path.join(self.data_path, 'recent_projects.json'), 'w') as fp:
-                json.dump(self.recent_projects, fp, default=to_dict, indent=2, sort_keys=True)
-        except IOError:
-            self.log.error("Failed to open recent items file for writing.")
-            self.inform.emit('[ERROR_NOTCL] %s' %
-                             _('Failed to open recent projects file for writing.'))
-            return
+        if record['kind'] == 'filename':
+            try:
+                with open(os.path.join(self.data_path, 'recent.json'), 'w') as f:
+                    json.dump(self.recent, f, default=to_dict, indent=2, sort_keys=True)
+            except IOError:
+                self.log.error("Failed to open recent items file for writing.")
+                self.inform.emit('[ERROR_NOTCL] %s' %
+                                _('Failed to open recent files file for writing.'))
+                return
+        else:
+            try:
+                with open(os.path.join(self.data_path, 'recent_projects.json'), 'w') as fp:
+                    json.dump(self.recent_projects, fp, default=to_dict, indent=2, sort_keys=True)
+            except IOError:
+                self.log.error("Failed to open recent items file for writing.")
+                self.inform.emit('[ERROR_NOTCL] %s' %
+                                _('Failed to open recent projects file for writing.'))
+                return
 
         # Re-build the recent items menu
         self.setup_recent_items()
@@ -5348,52 +5350,8 @@ class App(QtCore.QObject):
                                                 )
 
         # detect changes in the preferences
-        for idx in range(self.ui.pref_tab_area.count()):
-            for tb in self.ui.pref_tab_area.widget(idx).findChildren(QtWidgets.QWidget):
-                try:
-                    try:
-                        tb.textEdited.disconnect(self.preferencesUiManager.on_preferences_edited)
-                    except (TypeError, AttributeError):
-                        pass
-                    tb.textEdited.connect(self.preferencesUiManager.on_preferences_edited)
-                except AttributeError:
-                    pass
-
-                try:
-                    try:
-                        tb.modificationChanged.disconnect(self.preferencesUiManager.on_preferences_edited)
-                    except (TypeError, AttributeError):
-                        pass
-                    tb.modificationChanged.connect(self.preferencesUiManager.on_preferences_edited)
-                except AttributeError:
-                    pass
-
-                try:
-                    try:
-                        tb.toggled.disconnect(self.preferencesUiManager.on_preferences_edited)
-                    except (TypeError, AttributeError):
-                        pass
-                    tb.toggled.connect(self.preferencesUiManager.on_preferences_edited)
-                except AttributeError:
-                    pass
-
-                try:
-                    try:
-                        tb.valueChanged.disconnect(self.preferencesUiManager.on_preferences_edited)
-                    except (TypeError, AttributeError):
-                        pass
-                    tb.valueChanged.connect(self.preferencesUiManager.on_preferences_edited)
-                except AttributeError:
-                    pass
-
-                try:
-                    try:
-                        tb.currentIndexChanged.disconnect(self.preferencesUiManager.on_preferences_edited)
-                    except (TypeError, AttributeError):
-                        pass
-                    tb.currentIndexChanged.connect(self.preferencesUiManager.on_preferences_edited)
-                except AttributeError:
-                    pass
+        self.preferencesUiManager.pref_connect_on_changes()
+        self.log.debug("Preferences GUI initialized")
 
     def on_tools_database(self, source='app'):
         """
