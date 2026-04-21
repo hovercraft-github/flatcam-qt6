@@ -5,6 +5,8 @@
 # License:  MIT Licence                                    #
 # ##########################################################
 
+from shlex import join
+
 from PyQt6 import QtWidgets, QtCore, QtGui
 from appTool import AppTool
 from appGUI.GUIElements import VerticalScrollArea, FCLabel, FCButton, FCFrame, GLay, FCComboBox, FCCheckBox, \
@@ -2033,7 +2035,8 @@ class ToolMilling(Excellon, AppTool):
         return [str(x.text()) for x in self.ui.tools_table_mill_exc.selectedItems()]
 
     def on_apply_param_to_all_clicked(self):
-        if self.ui.tools_table_mill_exc.rowCount() == 0:
+        tbl_row_cnt = self.ui.tools_table_mill_exc.rowCount()
+        if tbl_row_cnt == 0:
             # there is no tool in tool table so, we can't save the GUI elements values to storage
             self.app.log.debug("ToolDrilling.on_apply_param_to_all_clicked() --> no tool in Tools Table, aborting.")
             return
@@ -2044,20 +2047,26 @@ class ToolMilling(Excellon, AppTool):
         if row < 0:
             row = 0
 
-        tooluid_item = int(self.ui.tools_table_mill_exc.item(row, 3).text())
+        current_tool_key = 1
+        tooluid_item = self.ui.tools_table_mill_exc.item(row, 3)
+        if tooluid_item:
+            current_tool_key = int(tooluid_item.text())
         temp_tool_data = {}
 
         for tooluid_key, tooluid_val in self.target_obj.tools.items():
-            if int(tooluid_key) == tooluid_item:
+            if int(tooluid_key) == current_tool_key:
                 # this will hold the 'data' key of the self.tools[tool] dictionary that corresponds to
                 # the current row in the tool table
                 temp_tool_data = tooluid_val['data']
                 break
 
-        for tooluid_key, tooluid_val in self.target_obj.tools.items():
-            tooluid_val['data'] = deepcopy(temp_tool_data)
-
-        self.app.inform.emit('[success] %s' % _("Current Tool parameters were applied to all tools."))
+        if temp_tool_data:
+            for tooluid_key, tooluid_val in self.target_obj.tools.items():
+                tooluid_val['data'] = deepcopy(temp_tool_data)
+            self.app.inform.emit('[success] %s' % _("Current Tool parameters were applied to all milling tools."))
+        else:
+            self.app.log.debug("ToolMilling.on_apply_param_to_all_clicked() --> no tool data found for current tool, aborting.")
+            self.app.inform.emit('[ERROR_NOTCL] %s' % _("No tool data found for current tool."))
         self.ui_connect()
 
     def on_order_changed(self, order):

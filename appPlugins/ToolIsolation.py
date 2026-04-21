@@ -988,20 +988,26 @@ class ToolIsolation(Gerber, AppTool):
         if row < 0:
             row = 0
 
-        tooluid_item = int(self.ui.tools_table.item(row, 3).text())
+        current_tool_key = 1
+        tooluid_item = self.ui.tools_table.item(row, 3)
+        if tooluid_item:
+            current_tool_key = int(tooluid_item.text())
         temp_tool_data = {}
 
         for tooluid_key, tooluid_val in self.iso_tools.items():
-            if int(tooluid_key) == tooluid_item:
+            if int(tooluid_key) == current_tool_key:
                 # this will hold the 'data' key of the self.tools[tool] dictionary that corresponds to
                 # the current row in the tool table
                 temp_tool_data = tooluid_val['data']
                 break
 
-        for tooluid_key, tooluid_val in self.iso_tools.items():
-            tooluid_val['data'] = deepcopy(temp_tool_data)
-
-        self.app.inform.emit('[success] %s' % _("Current Tool parameters were applied to all tools."))
+        if temp_tool_data:
+            for tooluid_key, tooluid_val in self.iso_tools.items():
+                tooluid_val['data'] = deepcopy(temp_tool_data)
+            self.app.inform.emit('[success] %s' % _("Current Tool parameters were applied to all tools."))
+        else:
+            self.app.log.debug("ToolIsolation.on_apply_param_to_all_clicked() --> no tool data found for current tool, aborting.")
+            self.app.inform.emit('[ERROR_NOTCL] %s' % _("No tool data found for current tool."))
         self.blockSignals(False)
 
     def on_add_tool_by_key(self):
